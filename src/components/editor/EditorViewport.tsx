@@ -1,6 +1,6 @@
 import PaintingTools from "./PaintingTools";
 import { lazy, Suspense, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Grid2X2 } from "lucide-react";
 import type { TerrainEditor } from "../../hooks/useTerrainEditor";
 import { terrainInfo, type Terrain } from "../../terrain";
 import ViewportToolbar from "./ViewportToolbar";
@@ -8,6 +8,7 @@ import CameraControls from "./CameraControls";
 import EditorHelp from "./EditorHelp";
 const TerrainScene = lazy(() => import("../TerrainScene"));
 export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
+  const [showGrid, setShowGrid] = useState(false);
   const [materialHint, setMaterialHint] = useState<Terrain | null>(null);
   const hint =
     materialHint &&
@@ -35,6 +36,7 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
             cells={editor.cells}
             settings={editor.renderSettings}
             mode={editor.mode}
+            showGrid={showGrid}
             onPaint={editor.paint}
             onHover={editor.setHover}
             navigate={editor.navigate}
@@ -46,6 +48,18 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
         </Suspense>
       </div>
       <div className="absolute right-4 top-5 flex items-center gap-2 md:right-6">
+        {preview && (
+          <button
+            aria-label="Show terrain grid"
+            aria-pressed={showGrid}
+            title={showGrid ? "Hide terrain grid" : "Show terrain grid"}
+            onClick={() => setShowGrid((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[10px] ${showGrid ? "bg-accent text-white" : "bg-paper/90 text-muted hover:bg-selected"}`}
+          >
+            <Grid2X2 size={14} />
+            Grid
+          </button>
+        )}
         <span className="flex items-center gap-1.5 rounded-md border border-line bg-paper/60 px-2 py-1.5 text-[9px] text-muted">
           <span className="size-1.5 rounded-full bg-[#729565]" />
           {editor.backend}

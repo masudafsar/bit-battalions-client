@@ -10,6 +10,7 @@ export default function TerrainScene(props: {
   cells: Cell[];
   settings: RenderSettings;
   mode: "edit" | "preview";
+  showGrid: boolean;
   onPaint: (index: number) => void;
   onHover: (index: number | null) => void;
   navigate: boolean;
@@ -50,7 +51,11 @@ export default function TerrainScene(props: {
         {props.mode === "edit" ? (
           <EditableGrid {...props} />
         ) : (
-          <ContinuousTerrain cells={props.cells} settings={props.settings} />
+          <ContinuousTerrain
+            cells={props.cells}
+            settings={props.settings}
+            showGrid={props.showGrid}
+          />
         )}
         <CameraRig
           terrainSize={props.settings.terrainSize}

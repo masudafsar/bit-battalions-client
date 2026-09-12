@@ -1,3 +1,4 @@
+import TerrainGrid from "./TerrainGrid";
 import { useEffect, useMemo } from "react";
 import type { Cell } from "../../terrain";
 import { buildTerrainMesh } from "../../geometry/buildTerrainMesh";
@@ -7,9 +8,11 @@ import type { RenderSettings } from "../../renderSettings";
 export default function ContinuousTerrain({
   cells,
   settings,
+  showGrid,
 }: {
   cells: Cell[];
   settings: RenderSettings;
+  showGrid: boolean;
 }) {
   const { terrain, water } = useMemo(() => {
     const terrain = buildTerrainMesh(cells, settings);
@@ -30,6 +33,7 @@ export default function ContinuousTerrain({
       {water.getAttribute("position").count > 0 && (
         <WaterSurface geometry={water} opacity={settings.waterOpacity} />
       )}
+      {showGrid && <TerrainGrid cells={cells} terrain={terrain} />}
     </group>
   );
 }
