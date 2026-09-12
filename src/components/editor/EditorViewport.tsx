@@ -1,3 +1,4 @@
+import PathTools from "./PathTools";
 import PaintingTools from "./PaintingTools";
 import { lazy, Suspense, useState } from "react";
 import { Check, Grid2X2 } from "lucide-react";
@@ -13,7 +14,8 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
   const hint =
     materialHint &&
     editor.mode === "edit" &&
-    !editor.navigate
+    !editor.navigate &&
+    editor.paintTool === "terrain"
       ? terrainInfo[materialHint]
       : null;
   const [help, setHelp] = useState(false);
@@ -67,7 +69,13 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
       </div>
       <ViewportToolbar editor={editor} />
       <CameraControls editor={editor} />
-      {!preview && !editor.navigate && <PaintingTools editor={editor} onHint={setMaterialHint} />}
+      {!preview &&
+        !editor.navigate &&
+        (editor.paintTool === "river" ? (
+          <PathTools />
+        ) : (
+          <PaintingTools editor={editor} onHint={setMaterialHint} />
+        ))}
       {hint && (
         <aside
           role="status"
@@ -95,7 +103,9 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
               ? editor.cameraTool === "pan"
                 ? "Pan mode"
                 : "Orbit mode"
-              : `Painting ${terrainInfo[editor.terrain].label.toLowerCase()}`}
+              : editor.paintTool === "river"
+                ? "Drawing river · Drag across cells"
+                : `Painting ${terrainInfo[editor.terrain].label.toLowerCase()}`}
           {
             <span className="ml-2 hidden border-l border-line pl-3 text-[9px] text-muted sm:inline">
               {preview || editor.navigate

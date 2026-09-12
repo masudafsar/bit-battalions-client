@@ -1,3 +1,4 @@
+import RiverSurface from "./scene/RiverSurface";
 import { Canvas } from "@react-three/fiber";
 import { WebGPURenderer } from "three/webgpu";
 import type { Cell } from "../terrain";
@@ -57,6 +58,10 @@ export default function TerrainScene(props: {
             showGrid={props.showGrid}
           />
         )}
+        <RiverSurface
+          cells={props.cells}
+          settings={props.mode === "preview" ? props.settings : undefined}
+        />
         <CameraRig
           terrainSize={props.settings.terrainSize}
           reset={props.reset}

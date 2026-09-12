@@ -1,12 +1,30 @@
-import { Hand, Orbit, Paintbrush, Redo2, Undo2 } from "lucide-react";
+import { Route, Hand, Orbit, Paintbrush, Redo2, Undo2 } from "lucide-react";
 import type { TerrainEditor } from "../../hooks/useTerrainEditor";
 export default function ViewportToolbar({ editor }: { editor: TerrainEditor }) {
   const buttons = [
     {
       label: "Paint terrain",
       icon: Paintbrush,
-      active: editor.mode === "edit" && !editor.navigate,
+      active:
+        editor.mode === "edit" &&
+        !editor.navigate &&
+        editor.paintTool === "terrain",
       action: () => {
+        editor.setPaintTool("terrain");
+        editor.setMode("edit");
+        editor.setNavigate(false);
+      },
+      disabled: false,
+    },
+    {
+      label: "Add paths",
+      icon: Route,
+      active:
+        editor.mode === "edit" &&
+        !editor.navigate &&
+        editor.paintTool === "river",
+      action: () => {
+        editor.setPaintTool("river");
         editor.setMode("edit");
         editor.setNavigate(false);
       },
@@ -59,7 +77,9 @@ export default function ViewportToolbar({ editor }: { editor: TerrainEditor }) {
           title={label}
           aria-label={label}
           aria-pressed={
-            label.endsWith("camera") || label === "Paint terrain"
+            label.endsWith("camera") ||
+            label === "Paint terrain" ||
+            label === "Add paths"
               ? active
               : undefined
           }

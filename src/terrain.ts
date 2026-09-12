@@ -1,6 +1,6 @@
 import { generateLandscape } from "./geometry/generateLandscape.ts";
 export type Terrain = "water" | "land" | "mountain";
-export type Cell = { q: number; r: number; type: Terrain };
+export type Cell = { q: number; r: number; type: Terrain; river?: number };
 export const RADIUS = 8;
 export const terrainInfo = {
   water: {
@@ -62,7 +62,9 @@ export function loadMap(size = RADIUS): Cell[] {
           c &&
           c.q === base[i].q &&
           c.r === base[i].r &&
-          Object.hasOwn(terrainInfo, c.type),
+          Object.hasOwn(terrainInfo, c.type) &&
+          (c.river === undefined ||
+            (Number.isInteger(c.river) && c.river >= 0 && c.river <= 63)),
       )
     )
       return saved;

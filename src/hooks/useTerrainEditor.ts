@@ -1,3 +1,4 @@
+import { drawRiver } from "../river";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   generate,
@@ -22,6 +23,8 @@ export function useTerrainEditor() {
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [cells, setCells] = useState(() => loadMap(renderSettings.terrainSize));
   const [terrain, setTerrain] = useState<Terrain>("land");
+  const [paintTool, setPaintTool] = useState<"terrain" | "river">("terrain");
+  const riverLast = useRef<Cell | null>(null);
   const [brush, setBrush] = useState(1);
   const [cameraTool, setCameraTool] = useState<"orbit" | "pan">("orbit");
   const [navigate, setNavigate] = useState(false);
@@ -56,6 +59,7 @@ export function useTerrainEditor() {
   useEffect(() => {
     const end = () => {
       stroke.current = false;
+      riverLast.current = null;
     };
     window.addEventListener("pointerup", end);
     window.addEventListener("blur", end);
@@ -109,11 +113,13 @@ export function useTerrainEditor() {
         "3": "mountain",
       };
       if (shortcuts[e.key]) {
+        setPaintTool("terrain");
         setTerrain(shortcuts[e.key]);
         setMode("edit");
         setNavigate(false);
       }
       if (e.key.toLowerCase() === "b") {
+        setPaintTool("terrain");
         setMode("edit");
         setNavigate(false);
       }
@@ -126,18 +132,29 @@ export function useTerrainEditor() {
     return () => window.removeEventListener("keydown", key);
   }, [undo, redo, settingsOpen]);
   function paint(index: number) {
-    if (mode !== "edit") return;
+    if (mode !== "edit" || navigate) return;
     const center = current.current[index];
-    const next = current.current.map((c) =>
-      Math.max(
-        Math.abs(c.q - center.q),
-        Math.abs(c.r - center.r),
-        Math.abs(c.q + c.r - center.q - center.r),
-      ) < brush
-        ? { ...c, type: terrain }
-        : c,
-    );
-    if (next.every((c, i) => c.type === current.current[i].type)) return;
+    const next =
+      paintTool === "river"
+        ? drawRiver(current.current, riverLast.current ?? center, center)
+        : current.current.map((c) =>
+            Math.max(
+              Math.abs(c.q - center.q),
+              Math.abs(c.r - center.r),
+              Math.abs(c.q + c.r - center.q - center.r),
+            ) < brush
+              ? { ...c, type: terrain }
+              : c,
+          );
+    if (paintTool === "river") riverLast.current = center;
+    if (
+      next.every(
+        (c, i) =>
+          c.type === current.current[i].type &&
+          c.river === current.current[i].river,
+      )
+    )
+      return;
     if (!stroke.current) {
       const before = current.current;
       setHistory((h) => ({ past: [...h.past.slice(-49), before], future: [] }));
@@ -180,6 +197,8 @@ export function useTerrainEditor() {
     cells,
     terrain,
     setTerrain,
+    paintTool,
+    setPaintTool,
     brush,
     setBrush,
     cameraTool,

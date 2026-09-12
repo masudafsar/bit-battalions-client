@@ -31,6 +31,8 @@ export async function exportMesh(
 ) {
   const { buildTerrainMesh } = await import("../geometry/buildTerrainMesh");
   const { buildWaterMesh } = await import("../geometry/buildWaterMesh");
+  const { buildRiverMesh } = await import("../geometry/buildRiverMesh");
+  const rivers = buildRiverMesh(cells, settings);
   const terrain = buildTerrainMesh(cells, settings),
     water = buildWaterMesh(terrain);
   try {
@@ -39,6 +41,7 @@ export async function exportMesh(
     for (const [name, geometry] of [
       ["Terrain", terrain],
       ["Water", water],
+      ["Rivers", rivers],
     ] as const) {
       const positions = geometry.getAttribute("position"),
         normals = geometry.getAttribute("normal"),
@@ -66,6 +69,7 @@ export async function exportMesh(
     }
     download(lines.join("\n"), "hexterra-terrain.obj", "text/plain");
   } finally {
+    rivers.dispose();
     terrain.dispose();
     water.dispose();
   }
