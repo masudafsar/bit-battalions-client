@@ -1,3 +1,4 @@
+import FullscreenButton from "./FullscreenButton";
 import EditorViewToggle from "./EditorViewToggle";
 import {
   ArrowDownToLine,
@@ -59,6 +60,7 @@ export default function EditorHeader({
         </button>
       </div>
       <div className="flex gap-1 sm:gap-2">
+        <FullscreenButton />
         <button
           onClick={onGenerate}
           aria-label="Generate new landscape"
