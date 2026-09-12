@@ -1,13 +1,25 @@
-* {
-  box-sizing: border-box;
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+@theme {
+  --font-sans: "DM Sans", sans-serif;
+  --font-display: "Manrope", sans-serif;
+  --color-ink: #293d36;
+  --color-muted: #899580;
+  --color-accent: #456853;
+  --color-paper: #fcfdf9;
+  --color-line: #e0e6d9;
+  --color-selected: #edf3e5;
 }
-
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
-body {
-  margin: 0;
+@layer base {
+  body {
+    @apply m-0 bg-paper font-sans text-ink antialiased;
+  }
+  button {
+    @apply cursor-pointer transition-colors disabled:cursor-default disabled:opacity-35;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible {
+    @apply outline-2 outline-offset-4 outline-accent;
+  }
 }
