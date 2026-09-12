@@ -64,3 +64,9 @@ WebGPU initializes asynchronously on HTTPS or localhost, with an explicitly labe
 Geometry tests verify shared vertices, connectivity, manifold edges, disk topology (no internal cracks/holes), upward normals, level water rest pose, cell-controlled elevation, repeatable seeded variation, connected ridges, steep mountain gradients, parameter effects, settings validation, and beach slopes relative to cliffs.
 
 Render settings are grouped into Terrain, Mountains, Coast, and Water tabs. **Save & rebuild** persists applied settings locally; closing the dialog discards draft edits. Mountain peak relief is sampled between the minimum and maximum heights (slopes and saddles are lower). Legacy height multipliers migrate automatically. Adjacent mountains use a seeded, curved spanning forest of ridges with blended junctions, avoiding triangular connection loops.
+
+## Paths and preview overlays
+
+The compact **Add paths** tool enables River; Road and Rail are disabled placeholders. Drag across hex cells to connect a river path. Rivers are stored separately from terrain materials in each cell, participate in map undo/redo and local persistence, and export as a separate OBJ object. This initial river surface follows terrain elevation; it does not yet excavate a channel or simulate downhill water flow.
+
+The **Grid** button in Terrain mesh toggles hex borders draped over land and water. Material descriptions appear in a small lower-left panel on hover or keyboard focus. Fullscreen is available in the app bar.
