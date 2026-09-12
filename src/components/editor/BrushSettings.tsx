@@ -7,26 +7,27 @@ export default function BrushSettings({
   onChange: (size: number) => void;
 }) {
   return (
-    <div className="mt-3">
-      <div className="mb-2 flex justify-between text-[11px]">
-        <span>Brush size</span>
-        <span className="text-muted">
-          {brush === 1 ? "Single hex" : `${brush === 2 ? 7 : 19} hexes`}
-        </span>
-      </div>
-      <div className="flex gap-1 rounded-lg bg-[#f0f2eb] p-1">
-        {[1, 2, 3].map((n) => (
+    <div
+      role="group"
+      aria-label="Brush size"
+      className="mt-1.5 flex flex-col gap-1 border-t border-line pt-1.5"
+    >
+      {[1, 2, 3].map((n) => {
+        const label = ["Small", "Medium", "Large"][n - 1];
+        const count = [1, 7, 19][n - 1];
+        return (
           <button
             key={n}
+            aria-label={`${label} brush (${count} ${count === 1 ? "hex" : "hexes"})`}
+            title={`${label} brush · ${count} ${count === 1 ? "hex" : "hexes"}`}
             aria-pressed={brush === n}
             onClick={() => onChange(n)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-[10px] ${brush === n ? "bg-white text-accent shadow-sm" : "text-muted hover:bg-white/50"}`}
+            className={`grid size-9 place-items-center rounded-md ${brush === n ? "bg-[#e2eacd] text-accent" : "text-muted hover:bg-selected"}`}
           >
-            <Hexagon size={12 + n * 3} />
-            {["Small", "Medium", "Large"][n - 1]}
+            <Hexagon size={10 + n * 5} strokeWidth={1.6} />
           </button>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }

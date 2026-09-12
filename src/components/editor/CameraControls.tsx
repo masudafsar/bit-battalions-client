@@ -2,7 +2,7 @@ import { Minus, Plus, RotateCcw } from "lucide-react";
 import type { TerrainEditor } from "../../hooks/useTerrainEditor";
 export default function CameraControls({ editor }: { editor: TerrainEditor }) {
   return (
-    <div className="absolute bottom-16 right-5 flex items-center gap-1 rounded-lg border border-line bg-paper/90 p-1 shadow-sm">
+    <div className="absolute bottom-5 right-5 flex items-center gap-1 rounded-lg border border-line bg-paper/90 p-1 shadow-sm">
       <button
         aria-label="Zoom out"
         onClick={() => editor.setZoom((z) => Math.max(0.6, z - 0.15))}

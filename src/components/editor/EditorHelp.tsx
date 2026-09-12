@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 export default function EditorHelp({ onClose }: { onClose: () => void }) {
   return (
-    <div className="absolute bottom-14 right-5 rounded-xl border border-line bg-paper p-6 text-[11px] shadow-lg">
+    <div className="absolute bottom-24 right-5 rounded-xl border border-line bg-paper p-6 text-[11px] shadow-lg">
       <button
         onClick={onClose}
         aria-label="Close help"

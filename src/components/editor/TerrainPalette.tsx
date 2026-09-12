@@ -1,4 +1,4 @@
-import { Check, Leaf, Mountain, Waves } from "lucide-react";
+import { Leaf, Mountain, Waves } from "lucide-react";
 import { terrainInfo, type Terrain } from "../../terrain";
 const icons = { water: Waves, land: Leaf, mountain: Mountain };
 const swatches = {
@@ -9,38 +9,34 @@ const swatches = {
 export default function TerrainPalette({
   terrain,
   onSelect,
+  onHint,
 }: {
   terrain: Terrain;
   onSelect: (value: Terrain) => void;
+  onHint: (value: Terrain | null) => void;
 }) {
   return (
-    <div className="flex gap-2">
+    <div
+      role="group"
+      aria-label="Terrain material"
+      className="flex flex-col gap-1"
+    >
       {(["water", "land", "mountain"] as Terrain[]).map((t, i) => {
         const Icon = icons[t];
         return (
           <button
             key={t}
+            aria-label={terrainInfo[t].label}
             aria-pressed={terrain === t}
-            title={terrainInfo[t].description}
+            title={`${terrainInfo[t].label} (${i + 1}) · ${terrainInfo[t].description}`}
+            onPointerEnter={() => onHint(t)}
+            onPointerLeave={() => onHint(null)}
+            onFocus={() => onHint(t)}
+            onBlur={() => onHint(null)}
             onClick={() => onSelect(t)}
-            className={`flex flex-1 items-center gap-2 rounded-lg border p-2 text-left ${terrain === t ? "border-accent/70 bg-selected" : "border-line bg-white hover:bg-selected/50"}`}
+            className={`grid size-9 place-items-center rounded-md ${terrain === t ? swatches[t] : "text-muted hover:bg-selected"}`}
           >
-            <span
-              className={`grid size-8 shrink-0 place-items-center [clip-path:polygon(50%_0,100%_24%,100%_76%,50%_100%,0_76%,0_24%)] ${swatches[t]}`}
-            >
-              <Icon size={24} strokeWidth={1.4} />
-            </span>
-            <span className="flex flex-col gap-1.5">
-              <strong className="text-[11px] font-semibold">
-                {terrainInfo[t].label}
-              </strong>
-              <small className="hidden whitespace-nowrap text-[9px] text-muted sm:block">
-                {terrainInfo[t].description}
-              </small>
-            </span>
-            <span className="ml-auto hidden text-[10px] text-muted sm:block">
-              {terrain === t ? <Check size={14} /> : i + 1}
-            </span>
+            <Icon size={18} strokeWidth={1.6} />
           </button>
         );
       })}
