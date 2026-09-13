@@ -8,8 +8,17 @@ export function buildHexGrid(cells: Cell[], terrain: BufferGeometry) {
   const key = (x: number, z: number) =>
     `${Math.round((x * 16) / Math.sqrt(3))},${Math.round(z * 16)}`;
   const heights = new Map<string, number>();
-  for (let i = 0; i < surface.count; i++)
+  for (let i = 0; i < surface.count; i++) {
+    const x = (surface.getX(i) * 16) / Math.sqrt(3),
+      z = surface.getZ(i) * 16;
+    // Refined channel vertices must not replace the original border lattice samples.
+    if (
+      Math.abs(x - Math.round(x)) > 0.0001 ||
+      Math.abs(z - Math.round(z)) > 0.0001
+    )
+      continue;
     heights.set(key(surface.getX(i), surface.getZ(i)), surface.getY(i));
+  }
   const vertices: number[] = [];
   const seen = new Set<string>();
   for (const cell of cells) {

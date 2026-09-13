@@ -1,3 +1,4 @@
+import { buildTerrainMesh } from "../src/geometry/buildTerrainMesh.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generate, type Cell } from "../src/terrain.ts";
@@ -151,4 +152,63 @@ test("single streams taper gradually and carved beds suppress high-frequency ter
     ).height;
     assert.ok(a > b, `bed must descend despite terrain noise: ${a} -> ${b}`);
   }
+});
+
+test("the rendered terrain mesh resolves a narrow channel and stays welded", () => {
+  const cells = fixture().map((c) =>
+    c.q === 0 && c.r === 0 ? { ...c, riverSource: 0 } : c,
+  );
+  const network = getRiverNetwork(cells, settings),
+    mesh = buildTerrainMesh(cells, settings),
+    p = mesh.getAttribute("position"),
+    indices = mesh.index!;
+  const edges = new Map<string, number>();
+  for (let i = 0; i < indices.count; i += 3) {
+    const ids = [indices.getX(i), indices.getX(i + 1), indices.getX(i + 2)];
+    for (let j = 0; j < 3; j++) {
+      const a = ids[j],
+        b = ids[(j + 1) % 3],
+        key = a < b ? `${a},${b}` : `${b},${a}`;
+      edges.set(key, (edges.get(key) ?? 0) + 1);
+    }
+  }
+  assert.ok([...edges.values()].every((n) => n === 1 || n === 2));
+  // All unpaired edges must be on the map perimeter, never near the river.
+  for (const [key, count] of edges)
+    if (count === 1) {
+      const [a, b] = key.split(",").map(Number);
+      assert.ok(
+        Math.hypot((p.getX(a) + p.getX(b)) / 2, (p.getZ(a) + p.getZ(b)) / 2) >
+          8,
+      );
+    }
+  for (const s of network.segments) {
+    const x = (s.a.x + s.b.x) / 2,
+      z = (s.a.z + s.b.z) / 2,
+      water = (s.a.y + s.b.y) / 2;
+    let height: number | undefined;
+    for (let i = 0; i < indices.count; i += 3) {
+      const a = indices.getX(i),
+        b = indices.getX(i + 1),
+        c = indices.getX(i + 2),
+        ax = p.getX(a),
+        az = p.getZ(a),
+        bx = p.getX(b),
+        bz = p.getZ(b),
+        cx = p.getX(c),
+        cz = p.getZ(c);
+      const d = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz),
+        u = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / d,
+        v = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / d;
+      if (u >= -1e-6 && v >= -1e-6 && u + v <= 1 + 1e-6) {
+        height = u * p.getY(a) + v * p.getY(b) + (1 - u - v) * p.getY(c);
+        break;
+      }
+    }
+    assert.ok(
+      height !== undefined && height < water - 0.04,
+      `channel mesh must stay submerged: ${height}, ${water}`,
+    );
+  }
+  mesh.dispose();
 });

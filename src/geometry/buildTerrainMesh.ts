@@ -1,10 +1,13 @@
 import { BufferGeometry, Float32BufferAttribute } from "three";
 import { position, type Cell } from "../terrain.ts";
 
+import { getRiverNetwork } from "./riverNetwork.ts";
+import { refineRiverMesh } from "./refineRiverMesh.ts";
 import { createTerrainField } from "./terrainField.ts";
 
 import {
   DEFAULT_RENDER_SETTINGS,
+  resolveSettings,
   type RenderSettings,
 } from "../renderSettings.ts";
 const SUBDIVISIONS = 8;
@@ -47,10 +50,14 @@ export function buildTerrainMesh(
         }
     }
   }
+  const network = getRiverNetwork(cells, resolveSettings(settings));
+  const faces = network.segments.length
+    ? refineRiverMesh(vertices, indices, vertex, network.near)
+    : indices;
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
-  geometry.setIndex(indices);
+  geometry.setIndex(faces);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   return geometry;
