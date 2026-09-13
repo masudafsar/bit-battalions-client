@@ -1,32 +1,25 @@
+import type { PreviewMesh } from "../../hooks/usePreviewMesh";
 import TerrainGrid from "./TerrainGrid";
-import { useEffect, useMemo } from "react";
 import type { Cell } from "../../terrain";
-import { buildTerrainMesh } from "../../geometry/buildTerrainMesh";
-import { buildWaterMesh } from "../../geometry/buildWaterMesh";
 import WaterSurface from "./WaterSurface";
 import type { RenderSettings } from "../../renderSettings";
 export default function ContinuousTerrain({
   cells,
   settings,
   showGrid,
+  meshes,
 }: {
   cells: Cell[];
   settings: RenderSettings;
   showGrid: boolean;
+  meshes: PreviewMesh;
 }) {
-  const { terrain, water } = useMemo(() => {
-    const terrain = buildTerrainMesh(cells, settings);
-    return { terrain, water: buildWaterMesh(terrain) };
-  }, [cells, settings]);
-  useEffect(
-    () => () => {
-      terrain.dispose();
-      water.dispose();
-    },
-    [terrain, water],
-  );
+  const { terrain, water } = meshes;
   return (
     <group>
+      <mesh geometry={meshes.rivers} renderOrder={3} raycast={() => null}>
+        <meshBasicMaterial color="#438fa8" polygonOffset polygonOffsetFactor={-2} />
+      </mesh>
       <mesh geometry={terrain}>
         <meshStandardMaterial vertexColors roughness={0.95} />
       </mesh>
