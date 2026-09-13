@@ -1,4 +1,4 @@
-import { addRiverSource } from "../river";
+import { selectRiverCorner } from "../river";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   generate,
@@ -24,6 +24,7 @@ export function useTerrainEditor() {
   const [cells, setCells] = useState(() => loadMap(renderSettings.terrainSize));
   const [terrain, setTerrain] = useState<Terrain>("land");
   const [paintTool, setPaintTool] = useState<"terrain" | "river">("terrain");
+  const [riverDraft, setRiverDraft] = useState<string[]>([]);
   const [brush, setBrush] = useState(1);
   const [cameraTool, setCameraTool] = useState<"orbit" | "pan">("orbit");
   const [navigate, setNavigate] = useState(false);
@@ -73,6 +74,7 @@ export function useTerrainEditor() {
   }, [notice]);
   const undo = useCallback(() => {
     if (!history.past.length) return;
+    setRiverDraft([]);
     const previous = history.past[history.past.length - 1];
     setHistory({
       past: history.past.slice(0, -1),
@@ -85,6 +87,7 @@ export function useTerrainEditor() {
   }, [history]);
   const redo = useCallback(() => {
     if (!history.future.length) return;
+    setRiverDraft([]);
     const next = history.future[0];
     setHistory({
       past: [...history.past, current.current],
@@ -97,6 +100,10 @@ export function useTerrainEditor() {
   }, [history]);
   useEffect(() => {
     function key(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setRiverDraft([]);
+        return;
+      }
       if (settingsOpen) return;
       if ((e.target as HTMLElement).matches("input,select,textarea")) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
@@ -135,16 +142,19 @@ export function useTerrainEditor() {
     let next: Cell[];
     if (paintTool === "river") {
       if (!down) return;
-      const result = addRiverSource(
+      const result = selectRiverCorner(
         current.current,
         index,
         x,
         z,
+        riverDraft,
         renderSettings,
       );
-      setNotice(result.error);
+      setNotice(result.message);
+      setRiverDraft(result.draft);
       next = result.cells;
     } else {
+      setRiverDraft([]);
       next = current.current.map((c) =>
         Math.max(
           Math.abs(c.q - center.q),
@@ -159,7 +169,7 @@ export function useTerrainEditor() {
       next.every(
         (c, i) =>
           c.type === current.current[i].type &&
-          c.riverSource === current.current[i].riverSource,
+          c.riverPath === current.current[i].riverPath,
       )
     )
       return;
@@ -172,6 +182,7 @@ export function useTerrainEditor() {
     setCells(next);
   }
   function applySettings(value: RenderSettings) {
+    setRiverDraft([]);
     const settings = normalizeSettings(value);
     if (settings.terrainSize !== renderSettings.terrainSize) {
       const before = current.current;
@@ -185,6 +196,7 @@ export function useTerrainEditor() {
     setRenderSettings(settings);
   }
   function regenerate() {
+    setRiverDraft([]);
     const before = current.current;
     setHistory((h) => ({ past: [...h.past.slice(-49), before], future: [] }));
     const seed =
@@ -198,6 +210,8 @@ export function useTerrainEditor() {
     setNotice("A new landscape is ready to explore.");
   }
   return {
+    riverDraft,
+    cancelRiver: () => setRiverDraft([]),
     renderSettings,
     applySettings,
     settingsOpen,

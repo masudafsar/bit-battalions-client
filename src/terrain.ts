@@ -6,6 +6,7 @@ export type Cell = {
   type: Terrain;
   river?: number;
   riverSource?: number;
+  riverPath?: string[];
 };
 export const RADIUS = 8;
 export const terrainInfo = {
@@ -69,6 +70,13 @@ export function loadMap(size = RADIUS): Cell[] {
           c.q === base[i].q &&
           c.r === base[i].r &&
           Object.hasOwn(terrainInfo, c.type) &&
+          (c.riverPath === undefined ||
+            (Array.isArray(c.riverPath) &&
+              c.riverPath.length <= 20000 &&
+              c.riverPath.every(
+                (key: unknown) =>
+                  typeof key === "string" && /^-?\d+,-?\d+$/.test(key),
+              ))) &&
           (c.riverSource === undefined ||
             (Number.isInteger(c.riverSource) &&
               c.riverSource >= 0 &&

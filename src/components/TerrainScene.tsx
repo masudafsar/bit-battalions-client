@@ -1,3 +1,4 @@
+import RiverDraft from "./scene/RiverDraft";
 import RiverSurface from "./scene/RiverSurface";
 import { Canvas } from "@react-three/fiber";
 import { WebGPURenderer } from "three/webgpu";
@@ -13,6 +14,7 @@ export default function TerrainScene(props: {
   mode: "edit" | "preview";
   showGrid: boolean;
   riverMode: boolean;
+  riverDraft: string[];
   onPaint: (index: number, x: number, z: number, down: boolean) => void;
   onHover: (index: number | null) => void;
   navigate: boolean;
@@ -58,6 +60,9 @@ export default function TerrainScene(props: {
             settings={props.settings}
             showGrid={props.showGrid}
           />
+        )}
+        {props.mode === "edit" && props.riverMode && (
+          <RiverDraft path={props.riverDraft} />
         )}
         <RiverSurface
           cells={props.cells}

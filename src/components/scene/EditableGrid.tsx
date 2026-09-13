@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { type ThreeEvent } from "@react-three/fiber";
 import { BufferGeometry, Float32BufferAttribute, Color } from "three";
+import { buildRiverGraph, cornerKey } from "../../geometry/riverGraph";
 import { position, terrainInfo, type Cell } from "../../terrain";
 
 export default function EditableGrid({
@@ -21,6 +22,7 @@ export default function EditableGrid({
       colors: number[] = [],
       lines: number[] = [],
       corners: number[] = [];
+    const riverGraph = buildRiverGraph(cells);
     cells.forEach((c) => {
       const [x, , z] = position(c.q, c.r),
         color = new Color(terrainInfo[c.type].color);
@@ -31,7 +33,8 @@ export default function EditableGrid({
           second = [x + Math.cos(b), 0, z + Math.sin(b)];
         vertices.push(x, 0, z, ...second, ...first);
         for (let j = 0; j < 3; j++) colors.push(color.r, color.g, color.b);
-        if (c.type === "mountain") corners.push(first[0], 0.04, first[2]);
+        if (riverGraph.get(cornerKey(first[0], first[2]))?.adjacent.size)
+          corners.push(first[0], 0.04, first[2]);
         lines.push(first[0], 0.015, first[2], second[0], 0.015, second[2]);
       }
     });

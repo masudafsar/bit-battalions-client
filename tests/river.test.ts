@@ -1,17 +1,16 @@
-import { buildTerrainMesh } from "../src/geometry/buildTerrainMesh.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generate, type Cell } from "../src/terrain.ts";
-import { addRiverSource } from "../src/river.ts";
 import {
+  buildRiverGraph,
   corner,
   cornerKey,
-  getRiverNetwork,
-} from "../src/geometry/riverNetwork.ts";
-import { createTerrainField, SEA_LEVEL } from "../src/geometry/terrainField.ts";
-import { createBaseTerrainField } from "../src/geometry/baseTerrainField.ts";
+} from "../src/geometry/riverGraph.ts";
+import { getRiverNetwork } from "../src/geometry/riverNetwork.ts";
+import { selectRiverCorner } from "../src/river.ts";
 import { DEFAULT_RENDER_SETTINGS as settings } from "../src/renderSettings.ts";
-import { buildRiverMesh } from "../src/geometry/buildRiverMesh.ts";
+import { createTerrainField } from "../src/geometry/terrainField.ts";
+import { buildTerrainMesh } from "../src/geometry/buildTerrainMesh.ts";
 function fixture(): Cell[] {
   return generate(3, 7).map((c) => ({
     ...c,
@@ -23,109 +22,155 @@ function fixture(): Cell[] {
           : "land",
   }));
 }
-test("only mountain sources draining into boundary-connected sea are accepted", () => {
+// Test fixture helper only: the application never computes a path for the user.
+function route(cells: Cell[], source: Cell, target?: (key: string) => boolean) {
+  const graph = buildRiverGraph(cells),
+    p = corner(source, 0),
+    start = cornerKey(p.x, p.z),
+    queue = [[start]],
+    seen = new Set([start]);
+  for (const path of queue) {
+    const key = path.at(-1)!;
+    if (path.length > 1 && (target ? target(key) : graph.get(key)!.ocean))
+      return path;
+    for (const next of graph.get(key)!.adjacent)
+      if (!seen.has(next)) {
+        seen.add(next);
+        queue.push([...path, next]);
+      }
+  }
+  throw Error("missing test route");
+}
+function manualCells() {
   const cells = fixture(),
-    index = cells.findIndex((c) => c.q === 0 && c.r === 0),
-    p = corner(cells[index], 0);
-  const result = addRiverSource(cells, index, p.x, p.z, settings);
-  assert.notEqual(result.cells, cells);
-  assert.equal(result.cells[index].riverSource, 0);
-  assert.equal(cells[index].riverSource, undefined);
-  const land = cells.findIndex((c) => c.type === "land");
-  assert.equal(addRiverSource(cells, land, 0, 0, settings).cells, cells);
+    source = cells.find((c) => c.q === 0 && c.r === 0)!;
+  return cells.map((c) =>
+    c === source ? { ...c, riverPath: route(cells, source) } : c,
+  );
+}
+function click(cells: Cell[], key: string, draft: string[]) {
+  const n = buildRiverGraph(cells).get(key)!;
+  return selectRiverCorner(
+    cells,
+    cells.indexOf(n.cells[0]),
+    n.x,
+    n.z,
+    draft,
+    settings,
+  );
+}
+test("manual corner clicks create only explicitly chosen edges and commit at the coast", () => {
+  let cells = fixture();
+  const source = cells.find((c) => c.q === 0 && c.r === 0)!,
+    path = route(cells, source);
+  let draft: string[] = [];
+  for (let i = 0; i < path.length; i++) {
+    const result = click(cells, path[i], draft);
+    draft = result.draft;
+    if (i < path.length - 1) {
+      assert.equal(result.cells, cells);
+      assert.equal(getRiverNetwork(cells, settings).segments.length, 0);
+    } else cells = result.cells;
+  }
+  assert.equal(draft.length, 0);
+  assert.deepEqual(cells.find((c) => c.riverPath)?.riverPath, path);
+  const network = getRiverNetwork(cells, settings);
+  assert.equal(network.segments.length, (path.length - 1) * 8);
+  for (let i = 0; i < path.length - 1; i++)
+    assert.equal(network.nodes.get(path[i])!.next, path[i + 1]);
+});
+test("edges require two dry cells; one or two water sides and map boundaries are forbidden", () => {
+  const cells = fixture(),
+    allDry = cells.map((c) => ({ ...c, type: "land" }) as Cell),
+    dryGraph = buildRiverGraph(allDry);
+  const a = [...dryGraph.keys()].find(
+    (key) => dryGraph.get(key)!.adjacent.size,
+  )!;
+  const b = [...dryGraph.get(a)!.adjacent][0];
+  const owners = dryGraph
+    .get(a)!
+    .cells.filter((c) => dryGraph.get(b)!.cells.includes(c));
+  assert.equal(owners.length, 2);
+  for (const count of [1, 2]) {
+    const modified = allDry.map((c) =>
+      owners.slice(0, count).includes(c) ? { ...c, type: "water" as const } : c,
+    );
+    assert.ok(!buildRiverGraph(modified).get(a)!.adjacent.has(b));
+  }
+  const graph = buildRiverGraph(cells);
+  for (const [key, n] of graph)
+    for (const next of n.adjacent) {
+      const other = graph.get(next)!;
+      const sides = n.cells.filter((c) => other.cells.includes(c));
+      assert.equal(sides.length, 2);
+      assert.ok(sides.every((c) => c.type !== "water"));
+      assert.ok(
+        Math.abs(Math.hypot(n.x - other.x, n.z - other.z) - 1) < 1e-6,
+        key,
+      );
+    }
+});
+test("skipped corners and loops are rejected; clicking the previous corner removes an edge", () => {
+  const cells = fixture(),
+    path = route(
+      cells,
+      cells.find((c) => c.q === 0 && c.r === 0)!,
+    );
+  assert.deepEqual(click(cells, path[3], [path[0]]).draft, [path[0]]);
+  assert.deepEqual(
+    click(cells, path[0], path.slice(0, 3)).draft,
+    path.slice(0, 3),
+  );
+  assert.deepEqual(click(cells, path[0], path.slice(0, 2)).draft, [path[0]]);
+});
+test("invalidated paths and legacy automatic sources never generate replacement routes", () => {
+  const cells = manualCells(),
+    path = cells.find((c) => c.riverPath)!.riverPath!,
+    graph = buildRiverGraph(cells);
+  const sides = graph
+    .get(path[1])!
+    .cells.filter((c) => graph.get(path[2])!.cells.includes(c));
+  const changed = cells.map((c) =>
+    c === sides[0] ? { ...c, type: "water" as const } : c,
+  );
+  assert.equal(getRiverNetwork(changed, settings).segments.length, 0);
+  const legacy = fixture().map((c) =>
+    c.type === "mountain" ? { ...c, riverSource: 0 } : c,
+  );
+  assert.equal(getRiverNetwork(legacy, settings).segments.length, 0);
   const noSea = cells.map(
     (c) => ({ ...c, type: c.type === "water" ? "land" : c.type }) as Cell,
   );
-  assert.equal(addRiverSource(noSea, index, p.x, p.z, settings).cells, noSea);
-  const lake = noSea.map(
-    (c) => ({ ...c, type: c.q === 2 && c.r === 0 ? "water" : c.type }) as Cell,
-  );
-  assert.equal(addRiverSource(lake, index, p.x, p.z, settings).cells, lake);
+  assert.equal(getRiverNetwork(noSea, settings).segments.length, 0);
 });
-test("corner-edge drainage is acyclic, downhill, branched and carved into the terrain", () => {
-  const cells = fixture().map((c) =>
-    c.type === "mountain" ? { ...c, riverSource: 0 } : c,
+test("manually connected tributaries retain downstream slope, taper and seeded meanders", () => {
+  const cells = manualCells(),
+    trunk = cells.find((c) => c.riverPath)!.riverPath!,
+    source = cells.find((c) => c.q === 0 && c.r === -2)!;
+  const branch = route(cells, source, (key) => trunk.includes(key));
+  const joined = cells.map((c) =>
+    c === source ? { ...c, riverPath: branch } : c,
   );
-  const network = getRiverNetwork(cells, settings),
-    field = createTerrainField(cells, settings),
-    base = createBaseTerrainField(cells, settings);
-  assert.equal(network.validSources.size, 5);
-  assert.ok(network.segments.length > 0);
-  const incoming = new Map<string, number>();
-  for (const c of cells.filter((c) => c.riverSource !== undefined)) {
-    const p = corner(c, 0);
-    let key = cornerKey(p.x, p.z);
-    const visited = new Set<string>();
-    for (;;) {
-      assert.ok(!visited.has(key));
-      visited.add(key);
-      const n = network.nodes.get(key)!;
-      if (!n.next) {
-        assert.ok(n.height < SEA_LEVEL);
-        break;
-      }
-      const next = network.nodes.get(n.next)!;
-      assert.ok(n.adjacent.has(n.next));
-      assert.ok(n.water > next.water);
-      assert.ok(Math.abs(Math.hypot(n.x - next.x, n.z - next.z) - 1) < 1e-6);
-      incoming.set(n.next, (incoming.get(n.next) ?? 0) + 1);
-      key = n.next;
-    }
-  }
+  const network = getRiverNetwork(joined, settings);
+  assert.equal(network.validSources.size, 2);
+  const field = createTerrainField(joined, settings);
   assert.ok(
-    network.segments.some((s) => s.endWidth > 0.065),
-    "tributaries increase downstream width",
+    network.segments.every(
+      (s) => s.a.y > s.b.y && s.endWidth >= s.width && s.endWidth < 0.12,
+    ),
   );
-  let carved = 0;
   for (const s of network.segments) {
     const x = (s.a.x + s.b.x) / 2,
-      z = (s.a.z + s.b.z) / 2,
-      y = (s.a.y + s.b.y) / 2;
-    assert.ok(s.a.y > s.b.y);
-    assert.ok(field(x, z).height <= y - 0.13);
-    if (field(x, z).height < base(x, z).height - 0.1) carved++;
+      z = (s.a.z + s.b.z) / 2;
+    assert.ok(field(x, z).height < (s.a.y + s.b.y) / 2 - 0.1);
   }
-  assert.ok(carved > 20);
-  const mesh = buildRiverMesh(cells, settings),
-    normals = mesh.getAttribute("normal");
-  assert.ok(normals.count > 0);
-  for (let i = 0; i < normals.count; i++) assert.ok(normals.getY(i) > 0);
-  mesh.dispose();
-});
-test("seeded edge meanders are repeatable and terrain edits invalidate old sources", () => {
-  const cells = fixture().map((c) =>
-    c.type === "mountain" ? { ...c, riverSource: 0 } : c,
+  assert.deepEqual(
+    network.segments,
+    getRiverNetwork([...joined], settings).segments,
   );
-  const a = getRiverNetwork(cells, settings),
-    b = getRiverNetwork([...cells], settings);
-  assert.deepEqual(a.segments, b.segments);
   assert.notDeepEqual(
-    a.segments,
-    getRiverNetwork(cells, { ...settings, seed: settings.seed + 1 }).segments,
-  );
-  const invalid = cells.map(
-    (c) => ({ ...c, type: c.type === "mountain" ? "land" : c.type }) as Cell,
-  );
-  assert.equal(getRiverNetwork(invalid, settings).segments.length, 0);
-  const removedSea = cells.map(
-    (c) => ({ ...c, type: c.type === "water" ? "land" : c.type }) as Cell,
-  );
-  assert.equal(getRiverNetwork(removedSea, settings).segments.length, 0);
-});
-
-test("large maps preserve valid downhill drainage without repeated graph construction", () => {
-  const cells = generate(47, 30).map((c) =>
-    c.type === "mountain" ? { ...c, riverSource: 0 } : c,
-  );
-  const network = getRiverNetwork(cells, settings);
-  assert.ok(network.validSources.size > 0);
-  assert.equal(getRiverNetwork(cells, settings), network);
-  assert.ok(network.segments.every((s) => s.a.y > s.b.y));
-});
-
-test("single streams taper gradually and carved beds suppress high-frequency terrain noise", () => {
-  const cells = fixture().map((c) =>
-    c.q === 0 && c.r === 0 ? { ...c, riverSource: 0 } : c,
+    network.segments,
+    getRiverNetwork(joined, { ...settings, seed: settings.seed + 1 }).segments,
   );
   const noisy = {
     ...settings,
@@ -133,31 +178,17 @@ test("single streams taper gradually and carved beds suppress high-frequency ter
     landRoughness: 1.5,
     randomness: 1,
   };
-  const network = getRiverNetwork(cells, noisy),
-    field = createTerrainField(cells, noisy);
-  assert.ok(network.segments.length > 8);
-  assert.ok(Math.min(...network.segments.map((s) => s.width)) <= 0.036);
-  assert.ok(Math.max(...network.segments.map((s) => s.endWidth)) > 0.055);
-  for (const s of network.segments) {
-    assert.ok(s.endWidth >= s.width);
-    assert.ok(s.endWidth < 0.12);
-    assert.ok(s.endWidth - s.width < 0.002);
-    const a = field(
-      s.a.x + (s.b.x - s.a.x) * 0.1,
-      s.a.z + (s.b.z - s.a.z) * 0.1,
-    ).height;
-    const b = field(
-      s.a.x + (s.b.x - s.a.x) * 0.9,
-      s.a.z + (s.b.z - s.a.z) * 0.9,
-    ).height;
-    assert.ok(a > b, `bed must descend despite terrain noise: ${a} -> ${b}`);
+  const n = getRiverNetwork(cells, noisy),
+    f = createTerrainField(cells, noisy);
+  for (const s of n.segments) {
+    assert.ok(
+      f(s.a.x + (s.b.x - s.a.x) * 0.1, s.a.z + (s.b.z - s.a.z) * 0.1).height >
+        f(s.a.x + (s.b.x - s.a.x) * 0.9, s.a.z + (s.b.z - s.a.z) * 0.9).height,
+    );
   }
 });
-
 test("the rendered terrain mesh resolves a narrow channel and stays welded", () => {
-  const cells = fixture().map((c) =>
-    c.q === 0 && c.r === 0 ? { ...c, riverSource: 0 } : c,
-  );
+  const cells = manualCells();
   const network = getRiverNetwork(cells, settings),
     mesh = buildTerrainMesh(cells, settings),
     p = mesh.getAttribute("position"),

@@ -39,6 +39,7 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
             settings={editor.renderSettings}
             mode={editor.mode}
             showGrid={showGrid}
+            riverDraft={editor.riverDraft}
             riverMode={editor.paintTool === "river" && !editor.navigate}
             onPaint={editor.paint}
             onHover={editor.setHover}
@@ -73,7 +74,10 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
       {!preview &&
         !editor.navigate &&
         (editor.paintTool === "river" ? (
-          <PathTools />
+          <PathTools
+            onCancel={editor.cancelRiver}
+            drafting={editor.riverDraft.length > 0}
+          />
         ) : (
           <PaintingTools editor={editor} onHint={setMaterialHint} />
         ))}
@@ -105,7 +109,7 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
                 ? "Pan mode"
                 : "Orbit mode"
               : editor.paintTool === "river"
-                ? "River · Click a mountain corner → sea"
+                ? "River · Select adjacent corners · Dry edges only"
                 : `Painting ${terrainInfo[editor.terrain].label.toLowerCase()}`}
           {
             <span className="ml-2 hidden border-l border-line pl-3 text-[9px] text-muted sm:inline">
@@ -113,9 +117,13 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
                 ? editor.cameraTool === "pan"
                   ? "Drag to pan"
                   : "Drag to orbit"
-                : selected
-                  ? `Q ${selected.q} · R ${selected.r}`
-                  : "Click & drag to paint"}
+                : editor.paintTool === "river"
+                  ? editor.riverDraft.length
+                    ? "Click next corner · Escape to cancel"
+                    : "Start at a mountain corner"
+                  : selected
+                    ? `Q ${selected.q} · R ${selected.r}`
+                    : "Click & drag to paint"}
             </span>
           }
         </div>

@@ -1,17 +1,14 @@
-import { position, type Cell } from "../terrain.ts";
+import type { Cell } from "../terrain.ts";
 import { createBaseTerrainField, SEA_LEVEL } from "./baseTerrainField.ts";
 import { random } from "./noise.ts";
 import type { RenderSettings } from "../renderSettings.ts";
-
-type Node = {
-  x: number;
-  z: number;
+import { buildRiverGraph, type CornerNode } from "./riverGraph.ts";
+export { corner, cornerKey } from "./riverGraph.ts";
+type Node = CornerNode & {
   height: number;
-  cells: Cell[];
-  adjacent: Set<string>;
+  water: number;
   next?: string;
   cost: number;
-  water: number;
 };
 export type RiverPoint = { x: number; z: number; y: number };
 export type RiverSegment = {
@@ -20,164 +17,85 @@ export type RiverSegment = {
   width: number;
   endWidth: number;
 };
-export const cornerKey = (x: number, z: number) =>
-  `${Math.round(x * 1e6)},${Math.round(z * 1e6)}`;
-export function corner(cell: Cell, index: number) {
-  const [x, , z] = position(cell.q, cell.r),
-    angle = Math.PI / 6 + (index * Math.PI) / 3;
-  return { x: x + Math.cos(angle), z: z + Math.sin(angle) };
-}
-// Binary heap keeps drainage construction O(V log V) at the largest map size.
-class Queue {
-  items: { key: string; cost: number }[] = [];
-  push(item: { key: string; cost: number }) {
-    let i = this.items.length;
-    this.items.push(item);
-    while (i > 0) {
-      const p = (i - 1) >> 1;
-      if (this.items[p].cost <= item.cost) break;
-      this.items[i] = this.items[p];
-      i = p;
-    }
-    this.items[i] = item;
-  }
-  pop() {
-    const first = this.items[0],
-      last = this.items.pop()!;
-    if (this.items.length) {
-      let i = 0;
-      while (i * 2 + 1 < this.items.length) {
-        let c = i * 2 + 1;
-        if (
-          c + 1 < this.items.length &&
-          this.items[c + 1].cost < this.items[c].cost
-        )
-          c++;
-        if (this.items[c].cost >= last.cost) break;
-        this.items[i] = this.items[c];
-        i = c;
-      }
-      this.items[i] = last;
-    }
-    return first;
-  }
-}
 export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
-  const nodes = new Map<string, Node>(),
-    field = createBaseTerrainField(cells, settings);
-  const lookup = new Map(cells.map((c) => [`${c.q},${c.r}`, c]));
-  const directions = [
-    [1, 0],
-    [0, 1],
-    [-1, 1],
-    [-1, 0],
-    [0, -1],
-    [1, -1],
-  ];
-  // Only water connected to the map boundary is an ocean outlet; inland lakes are not sinks.
-  const ocean = new Set<Cell>(),
-    flood = cells.filter(
-      (c) =>
-        c.type === "water" &&
-        directions.some(([q, r]) => !lookup.has(`${c.q + q},${c.r + r}`)),
-    );
-  for (const c of flood) ocean.add(c);
-  for (let i = 0; i < flood.length; i++)
-    for (const [q, r] of directions) {
-      const c = lookup.get(`${flood[i].q + q},${flood[i].r + r}`);
-      if (c?.type === "water" && !ocean.has(c)) {
-        ocean.add(c);
-        flood.push(c);
-      }
-    }
-  for (const cell of cells) {
-    const keys = Array.from({ length: 6 }, (_, i) => {
-      const p = corner(cell, i),
-        key = cornerKey(p.x, p.z);
-      let n = nodes.get(key);
-      if (!n) {
-        n = {
-          ...p,
-          height: field(p.x, p.z).height,
-          cells: [],
-          adjacent: new Set(),
-          cost: Infinity,
-          water: SEA_LEVEL + 0.01,
-        };
-        nodes.set(key, n);
-      }
-      n.cells.push(cell);
-      return key;
+  const field = createBaseTerrainField(cells, settings),
+    nodes = new Map<string, Node>();
+  for (const [key, n] of buildRiverGraph(cells))
+    nodes.set(key, {
+      ...n,
+      height: field(n.x, n.z).height,
+      water: SEA_LEVEL + 0.01,
+      cost: Infinity,
     });
-    for (let i = 0; i < 6; i++) {
-      nodes.get(keys[i])!.adjacent.add(keys[(i + 1) % 6]);
-      nodes.get(keys[(i + 1) % 6])!.adjacent.add(keys[i]);
-    }
-  }
-  const queue = new Queue(),
-    order: string[] = [];
-  for (const [key, n] of nodes)
-    if (n.cells.every((c) => ocean.has(c)) && n.height < SEA_LEVEL) {
-      n.cost = 0;
-      queue.push({ key, cost: 0 });
-    }
-  while (queue.items.length) {
-    const item = queue.pop(),
-      n = nodes.get(item.key)!;
-    if (item.cost !== n.cost) continue;
-    order.push(item.key);
-    for (const key of n.adjacent) {
-      const other = nodes.get(key)!;
-      const uphill = Math.max(0, n.height - other.height);
-      const cost =
-        n.cost +
-        1 +
-        uphill * 18 +
-        random(
-          Math.round(other.x * 100),
-          Math.round(other.z * 100),
-          settings.seed,
-        ) *
-          1.6;
-      if (cost < other.cost) {
-        other.cost = cost;
-        other.next = item.key;
-        queue.push({ key, cost });
-      }
-    }
-  }
-  // A strictly descending water profile is shared by all tributaries, including confluences.
-  for (const key of order) {
-    const n = nodes.get(key)!;
-    if (n.next) {
-      const downstream = nodes.get(n.next)!;
-      n.water = Math.max(
-        downstream.water + 0.003,
-        Math.min(n.height - 0.05, downstream.water + 0.32),
-      );
+  const paths = cells
+    .filter((c) => c.riverPath?.length)
+    .map((c) => ({ cell: c, path: c.riverPath! }));
+  const conflicts = new Set<string>();
+  for (const { path } of paths) {
+    if (
+      !nodes.get(path[0])?.cells.some((c) => c.type === "mountain") ||
+      path.some(
+        (key, i) =>
+          !nodes.has(key) ||
+          (i > 0 && !nodes.get(path[i - 1])!.adjacent.has(key)),
+      )
+    )
+      continue;
+    for (let i = 0; i < path.length - 1; i++) {
+      const n = nodes.get(path[i])!;
+      if (n.next && n.next !== path[i + 1]) conflicts.add(path[i]);
+      n.next = path[i + 1];
     }
   }
   const flow = new Map<string, number>(),
-    validSources = new Set<string>();
-  for (const cell of cells) {
-    if (cell.type !== "mountain" || cell.riverSource === undefined) continue;
-    const p = corner(cell, cell.riverSource),
-      key = cornerKey(p.x, p.z),
-      source = nodes.get(key)!;
-    if (
-      !Number.isFinite(source.cost) ||
-      !source.next ||
-      source.height <= SEA_LEVEL + 0.08
-    )
-      continue;
-    validSources.add(`${cell.q},${cell.r}`);
-    let cursor: string | undefined = key;
-    while (cursor) {
-      const node: Node = nodes.get(cursor)!;
-      if (!node.next) break;
-      flow.set(cursor, (flow.get(cursor) ?? 0) + 1);
-      cursor = node.next;
+    validSources = new Set<string>(),
+    order: string[] = [];
+  const included = new Set<string>();
+  for (const { cell, path } of paths) {
+    if (!nodes.get(path[0])?.cells.some((c) => c.type === "mountain")) continue;
+    const chain: string[] = [],
+      visited = new Set<string>();
+    let key: string | undefined = path[0],
+      valid = false;
+    while (key) {
+      if (visited.has(key) || conflicts.has(key)) break;
+      visited.add(key);
+      chain.push(key);
+      const n: Node | undefined = nodes.get(key);
+      if (!n) break;
+      if (n.ocean) {
+        valid = chain.length > 1;
+        break;
+      }
+      if (!n.next || !n.adjacent.has(n.next)) break;
+      key = n.next;
     }
+    if (!valid || !path.every((key, i) => chain[i] === key)) continue;
+    validSources.add(`${cell.q},${cell.r}`);
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const key = chain[i],
+        n = nodes.get(key)!;
+      n.cost = chain.length - 1 - i;
+      if (!included.has(key)) {
+        included.add(key);
+        order.push(key);
+      }
+      if (i < chain.length - 1) flow.set(key, (flow.get(key) ?? 0) + 1);
+    }
+  }
+  // Topological order follows ONLY user-selected edges, never a shortest route.
+  order.sort((a, b) => nodes.get(a)!.cost - nodes.get(b)!.cost);
+  for (const key of order) {
+    const n = nodes.get(key)!;
+    if (n.ocean) {
+      n.next = undefined;
+      continue;
+    }
+    const downstream = nodes.get(n.next!)!;
+    n.water = Math.max(
+      downstream.water + 0.003,
+      Math.min(n.height - 0.05, downstream.water + 0.32),
+    );
   }
   // Accumulated upstream distance widens even a single, unbranched stream.
   const distance = new Map<string, number>();
@@ -256,7 +174,7 @@ export function getRiverNetwork(cells: Cell[], settings: RenderSettings) {
     entry = cache.get(cells);
   if (entry?.key === key) return entry.network;
   // No source means no graph construction during ordinary terrain painting.
-  const network = cells.some((c) => c.riverSource !== undefined)
+  const network = cells.some((c) => c.riverPath !== undefined)
     ? buildRiverNetwork(cells, settings)
     : {
         nodes: new Map<string, Node>(),

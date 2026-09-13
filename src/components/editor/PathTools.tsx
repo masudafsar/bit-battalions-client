@@ -1,5 +1,11 @@
-import { Waves, Route, TrainFront } from "lucide-react";
-export default function PathTools() {
+import { Waves, Route, TrainFront, X } from "lucide-react";
+export default function PathTools({
+  onCancel,
+  drafting,
+}: {
+  onCancel: () => void;
+  drafting: boolean;
+}) {
   return (
     <section
       aria-label="Path tools"
@@ -8,7 +14,7 @@ export default function PathTools() {
       <button
         aria-label="River"
         aria-pressed
-        title="River · Click a mountain corner to connect it to the sea"
+        title="River · Select consecutive corners along dry edges"
         className="grid size-9 place-items-center rounded-md bg-[#d1e4e8] text-[#5891a6]"
       >
         <Waves size={18} />
@@ -29,6 +35,16 @@ export default function PathTools() {
       >
         <TrainFront size={18} />
       </button>
+      {drafting && (
+        <button
+          onClick={onCancel}
+          aria-label="Cancel river path"
+          title="Cancel river path (Escape)"
+          className="grid size-9 place-items-center rounded-md text-muted hover:bg-black/5"
+        >
+          <X size={18} />
+        </button>
+      )}
     </section>
   );
 }
