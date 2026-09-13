@@ -1,3 +1,4 @@
+import type { ReportProgress } from "./meshProgress.ts";
 import { BufferGeometry, Float32BufferAttribute } from "three";
 import { position, type Cell } from "../terrain.ts";
 
@@ -15,7 +16,9 @@ const SUBDIVISIONS = 8;
 export function buildTerrainMesh(
   cells: Cell[],
   settings: number | RenderSettings = DEFAULT_RENDER_SETTINGS,
+  onProgress?: ReportProgress,
 ) {
+  onProgress?.(0);
   const vertices: number[] = [],
     colors: number[] = [],
     indices: number[] = [];
@@ -32,6 +35,7 @@ export function buildTerrainMesh(
     shared.set(key, index);
     return index;
   }
+  let completed = 0;
   for (const cell of cells) {
     const [x, , z] = position(cell.q, cell.r);
     for (let sector = 0; sector < 6; sector++) {
@@ -49,16 +53,20 @@ export function buildTerrainMesh(
             indices.push(point(i + 1, j), point(i, j + 1), point(i + 1, j + 1));
         }
     }
+    onProgress?.(0.7 * ++completed / cells.length);
   }
   const network = getRiverNetwork(cells, resolveSettings(settings));
   const faces = network.segments.length
-    ? refineRiverMesh(vertices, indices, vertex, network.near)
+    ? refineRiverMesh(vertices, indices, vertex, network.near,
+        (fraction) => onProgress?.(0.7 + fraction * 0.2))
     : indices;
+  onProgress?.(0.9);
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
   geometry.setIndex(faces);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
+  onProgress?.(1);
   return geometry;
 }

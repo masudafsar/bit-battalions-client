@@ -1,3 +1,4 @@
+import type { ReportProgress } from "./meshProgress.ts";
 import { BufferGeometry, Float32BufferAttribute } from "three";
 import type { Cell } from "../terrain.ts";
 import {
@@ -9,10 +10,13 @@ export function buildRiverMesh(
   cells: Cell[],
   settings: RenderSettings = DEFAULT_RENDER_SETTINGS,
   flat = false,
+  onProgress?: ReportProgress,
 ) {
   const network = getRiverNetwork(cells, settings),
     vertices: number[] = [],
     indices: number[] = [];
+  let completed = 0;
+  onProgress?.(0);
   for (const s of network.segments) {
     const dx = s.b.x - s.a.x,
       dz = s.b.z - s.a.z,
@@ -47,10 +51,12 @@ export function buildRiverMesh(
       );
       if (i) indices.push(center, center + i + 1, center + i);
     }
+    onProgress?.(0.95 * ++completed / network.segments.length);
   }
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  onProgress?.(1);
   return geometry;
 }

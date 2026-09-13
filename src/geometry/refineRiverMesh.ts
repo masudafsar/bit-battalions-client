@@ -1,3 +1,4 @@
+import type { ReportProgress } from "./meshProgress.ts";
 import type { RiverSegment } from "./riverNetwork.ts";
 /** Split shared edges on both sides, preserving a welded surface at refinement boundaries. */
 export function refineRiverMesh(
@@ -5,12 +6,14 @@ export function refineRiverMesh(
   triangles: number[],
   vertex: (x: number, z: number) => number,
   near: (x: number, z: number) => RiverSegment[],
+  onProgress?: ReportProgress,
 ) {
   let faces = triangles;
   const edge = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
   for (let pass = 0; pass < 2; pass++) {
     const splits = new Map<string, number>();
     for (let i = 0; i < faces.length; i += 3) {
+      if (i % 768 === 0) onProgress?.((pass * 2 + i / faces.length) / 4);
       const ids = faces.slice(i, i + 3),
         x = ids.reduce((v, id) => v + vertices[id * 3], 0) / 3,
         z = ids.reduce((v, id) => v + vertices[id * 3 + 2], 0) / 3;
@@ -45,6 +48,7 @@ export function refineRiverMesh(
     }
     const next: number[] = [];
     for (let i = 0; i < faces.length; i += 3) {
+      if (i % 768 === 0) onProgress?.((pass * 2 + 1 + i / faces.length) / 4);
       const ids = faces.slice(i, i + 3),
         outline: number[] = [];
       let split = false;
@@ -69,5 +73,6 @@ export function refineRiverMesh(
     }
     faces = next;
   }
+  onProgress?.(1);
   return faces;
 }

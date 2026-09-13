@@ -1,8 +1,9 @@
+import type { ReportProgress } from "./meshProgress.ts";
 import { BufferGeometry, Color, Float32BufferAttribute } from "three";
 import { SEA_LEVEL } from "./terrainField.ts";
 type Point = { x: number; y: number; z: number };
 /** Clip the water to the actual terrain/sea-level intersection, not hex borders. */
-export function buildWaterMesh(terrain: BufferGeometry) {
+export function buildWaterMesh(terrain: BufferGeometry, onProgress?: ReportProgress) {
   const source = terrain.getAttribute("position"),
     triangles = terrain.getIndex()!;
   const vertices: number[] = [],
@@ -18,6 +19,7 @@ export function buildWaterMesh(terrain: BufferGeometry) {
     depths.push(depth);
   };
   for (let i = 0; i < triangles.count; i += 3) {
+    if (i % 768 === 0) onProgress?.(0.95 * i / triangles.count);
     const points = [0, 1, 2].map((j) => {
         const k = triangles.getX(i + j);
         return { x: source.getX(k), y: source.getY(k), z: source.getZ(k) };
@@ -50,5 +52,6 @@ export function buildWaterMesh(terrain: BufferGeometry) {
   geometry.setAttribute("waterDepth", new Float32BufferAttribute(depths, 1));
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
+  onProgress?.(1);
   return geometry;
 }
