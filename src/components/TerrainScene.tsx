@@ -12,7 +12,8 @@ export default function TerrainScene(props: {
   settings: RenderSettings;
   mode: "edit" | "preview";
   showGrid: boolean;
-  onPaint: (index: number) => void;
+  riverMode: boolean;
+  onPaint: (index: number, x: number, z: number, down: boolean) => void;
   onHover: (index: number | null) => void;
   navigate: boolean;
   cameraTool: "orbit" | "pan";
@@ -60,7 +61,8 @@ export default function TerrainScene(props: {
         )}
         <RiverSurface
           cells={props.cells}
-          settings={props.mode === "preview" ? props.settings : undefined}
+          settings={props.settings}
+          flat={props.mode === "edit"}
         />
         <CameraRig
           terrainSize={props.settings.terrainSize}

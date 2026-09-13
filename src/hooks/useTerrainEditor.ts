@@ -1,4 +1,4 @@
-import { drawRiver } from "../river";
+import { addRiverSource } from "../river";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   generate,
@@ -24,7 +24,6 @@ export function useTerrainEditor() {
   const [cells, setCells] = useState(() => loadMap(renderSettings.terrainSize));
   const [terrain, setTerrain] = useState<Terrain>("land");
   const [paintTool, setPaintTool] = useState<"terrain" | "river">("terrain");
-  const riverLast = useRef<Cell | null>(null);
   const [brush, setBrush] = useState(1);
   const [cameraTool, setCameraTool] = useState<"orbit" | "pan">("orbit");
   const [navigate, setNavigate] = useState(false);
@@ -59,7 +58,6 @@ export function useTerrainEditor() {
   useEffect(() => {
     const end = () => {
       stroke.current = false;
-      riverLast.current = null;
     };
     window.addEventListener("pointerup", end);
     window.addEventListener("blur", end);
@@ -131,27 +129,37 @@ export function useTerrainEditor() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [undo, redo, settingsOpen]);
-  function paint(index: number) {
+  function paint(index: number, x: number, z: number, down: boolean) {
     if (mode !== "edit" || navigate) return;
     const center = current.current[index];
-    const next =
-      paintTool === "river"
-        ? drawRiver(current.current, riverLast.current ?? center, center)
-        : current.current.map((c) =>
-            Math.max(
-              Math.abs(c.q - center.q),
-              Math.abs(c.r - center.r),
-              Math.abs(c.q + c.r - center.q - center.r),
-            ) < brush
-              ? { ...c, type: terrain }
-              : c,
-          );
-    if (paintTool === "river") riverLast.current = center;
+    let next: Cell[];
+    if (paintTool === "river") {
+      if (!down) return;
+      const result = addRiverSource(
+        current.current,
+        index,
+        x,
+        z,
+        renderSettings,
+      );
+      setNotice(result.error);
+      next = result.cells;
+    } else {
+      next = current.current.map((c) =>
+        Math.max(
+          Math.abs(c.q - center.q),
+          Math.abs(c.r - center.r),
+          Math.abs(c.q + c.r - center.q - center.r),
+        ) < brush
+          ? { ...c, type: terrain }
+          : c,
+      );
+    }
     if (
       next.every(
         (c, i) =>
           c.type === current.current[i].type &&
-          c.river === current.current[i].river,
+          c.riverSource === current.current[i].riverSource,
       )
     )
       return;

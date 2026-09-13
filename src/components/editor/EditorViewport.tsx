@@ -39,6 +39,7 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
             settings={editor.renderSettings}
             mode={editor.mode}
             showGrid={showGrid}
+            riverMode={editor.paintTool === "river" && !editor.navigate}
             onPaint={editor.paint}
             onHover={editor.setHover}
             navigate={editor.navigate}
@@ -104,7 +105,7 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
                 ? "Pan mode"
                 : "Orbit mode"
               : editor.paintTool === "river"
-                ? "Drawing river · Drag across cells"
+                ? "River · Click a mountain corner → sea"
                 : `Painting ${terrainInfo[editor.terrain].label.toLowerCase()}`}
           {
             <span className="ml-2 hidden border-l border-line pl-3 text-[9px] text-muted sm:inline">

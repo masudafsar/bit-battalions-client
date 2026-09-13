@@ -5,13 +5,15 @@ import { buildRiverMesh } from "../../geometry/buildRiverMesh";
 export default function RiverSurface({
   cells,
   settings,
+  flat,
 }: {
   cells: Cell[];
-  settings?: RenderSettings;
+  settings: RenderSettings;
+  flat: boolean;
 }) {
   const geometry = useMemo(
-    () => buildRiverMesh(cells, settings),
-    [cells, settings],
+    () => buildRiverMesh(cells, settings, flat),
+    [cells, settings, flat],
   );
   useEffect(() => () => geometry.dispose(), [geometry]);
   return (

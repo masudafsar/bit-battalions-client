@@ -8,16 +8,19 @@ export default function EditableGrid({
   onPaint,
   onHover,
   navigate,
+  riverMode,
 }: {
   cells: Cell[];
-  onPaint: (index: number) => void;
+  onPaint: (index: number, x: number, z: number, down: boolean) => void;
   onHover: (index: number | null) => void;
   navigate: boolean;
+  riverMode: boolean;
 }) {
   const geometry = useMemo(() => {
     const vertices: number[] = [],
       colors: number[] = [],
-      lines: number[] = [];
+      lines: number[] = [],
+      corners: number[] = [];
     cells.forEach((c) => {
       const [x, , z] = position(c.q, c.r),
         color = new Color(terrainInfo[c.type].color);
@@ -28,6 +31,7 @@ export default function EditableGrid({
           second = [x + Math.cos(b), 0, z + Math.sin(b)];
         vertices.push(x, 0, z, ...second, ...first);
         for (let j = 0; j < 3; j++) colors.push(color.r, color.g, color.b);
+        if (c.type === "mountain") corners.push(first[0], 0.04, first[2]);
         lines.push(first[0], 0.015, first[2], second[0], 0.015, second[2]);
       }
     });
@@ -37,12 +41,32 @@ export default function EditableGrid({
     surface.computeVertexNormals();
     const outline = new BufferGeometry();
     outline.setAttribute("position", new Float32BufferAttribute(lines, 3));
-    return { surface, outline };
+    const sources = new BufferGeometry();
+    const dots: number[] = [];
+    for (let i = 0; i < corners.length; i += 3)
+      for (let j = 0; j < 8; j++) {
+        const a = (j * Math.PI) / 4,
+          b = ((j + 1) * Math.PI) / 4;
+        dots.push(
+          corners[i],
+          0.06,
+          corners[i + 2],
+          corners[i] + Math.cos(b) * 0.09,
+          0.06,
+          corners[i + 2] + Math.sin(b) * 0.09,
+          corners[i] + Math.cos(a) * 0.09,
+          0.06,
+          corners[i + 2] + Math.sin(a) * 0.09,
+        );
+      }
+    sources.setAttribute("position", new Float32BufferAttribute(dots, 3));
+    return { surface, outline, sources };
   }, [cells]);
   useEffect(
     () => () => {
       geometry.surface.dispose();
       geometry.outline.dispose();
+      geometry.sources.dispose();
     },
     [geometry],
   );
@@ -51,10 +75,16 @@ export default function EditableGrid({
     if (e.faceIndex == null) return;
     const index = Math.floor(e.faceIndex / 6);
     onHover(index);
-    if (!navigate && (down || e.buttons === 1)) onPaint(index);
+    if (!navigate && (down || e.buttons === 1))
+      onPaint(index, e.point.x, e.point.z, down);
   }
   return (
     <group>
+      {riverMode && (
+        <mesh renderOrder={5} geometry={geometry.sources} raycast={() => null}>
+          <meshBasicMaterial color="#eefbff" depthTest={false} />
+        </mesh>
+      )}
       <mesh
         geometry={geometry.surface}
         onPointerDown={(e) => {

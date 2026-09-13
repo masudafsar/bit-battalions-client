@@ -8,7 +8,7 @@ export default function PathTools() {
       <button
         aria-label="River"
         aria-pressed
-        title="River · Drag across cells"
+        title="River · Click a mountain corner to connect it to the sea"
         className="grid size-9 place-items-center rounded-md bg-[#d1e4e8] text-[#5891a6]"
       >
         <Waves size={18} />
