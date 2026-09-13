@@ -1,3 +1,5 @@
+import { usePreviewMesh } from "../hooks/usePreviewMesh";
+import MeshLoading from "./editor/MeshLoading";
 import RiverSurface from "./scene/RiverSurface";
 import { Canvas } from "@react-three/fiber";
 import { WebGPURenderer } from "three/webgpu";
@@ -21,8 +23,28 @@ export default function TerrainScene(props: {
   zoom: number;
   onBackend: (backend: string) => void;
 }) {
+  const mesh = usePreviewMesh(
+    props.cells,
+    props.settings,
+    props.mode === "preview",
+  );
   return (
     <SceneBoundary>
+      {mesh.loading && <MeshLoading progress={mesh.progress} />}
+      {mesh.error && (
+        <div
+          role="alert"
+          className="absolute inset-0 z-10 grid place-content-center gap-3 bg-paper/90 p-6 text-center text-sm text-accent"
+        >
+          <p>{mesh.error}</p>
+          <button
+            onClick={mesh.retry}
+            className="rounded-lg border border-line px-4 py-2 hover:bg-selected"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <Canvas
         frameloop="demand"
         dpr={[1, 1.75]}
@@ -52,18 +74,17 @@ export default function TerrainScene(props: {
         />
         {props.mode === "edit" ? (
           <EditableGrid {...props} />
-        ) : (
+        ) : mesh.meshes ? (
           <ContinuousTerrain
+            meshes={mesh.meshes}
             cells={props.cells}
             settings={props.settings}
             showGrid={props.showGrid}
           />
+        ) : null}
+        {props.mode === "edit" && (
+          <RiverSurface cells={props.cells} settings={props.settings} flat />
         )}
-        <RiverSurface
-          cells={props.cells}
-          settings={props.settings}
-          flat={props.mode === "edit"}
-        />
         <CameraRig
           terrainSize={props.settings.terrainSize}
           reset={props.reset}
