@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 export default function EditorHeader({
   mode,
+  exporting,
   onModeChange,
   onOpenSettings,
   onGenerate,
@@ -18,6 +19,7 @@ export default function EditorHeader({
   onExportMesh,
 }: {
   mode: "edit" | "preview";
+  exporting: boolean;
   onModeChange: (mode: "edit" | "preview") => void;
   onOpenSettings: () => void;
   onGenerate: () => void;
@@ -78,9 +80,10 @@ export default function EditorHeader({
           <span className="hidden sm:inline">Save JSON</span>
         </button>
         <button
+          disabled={exporting}
           aria-label="Export mesh"
           onClick={onExportMesh}
-          className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2.5 text-[10px] text-white hover:bg-accent/90"
+          className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2.5 text-[10px] text-white hover:bg-accent/90 disabled:cursor-wait disabled:opacity-60"
         >
           <ArrowDownToLine size={14} />
           <span className="hidden sm:inline">Export mesh</span>

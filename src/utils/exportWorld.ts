@@ -1,3 +1,4 @@
+import type { MeshProgress } from "../geometry/meshProgress";
 import type { Cell } from "../terrain";
 import {
   DEFAULT_RENDER_SETTINGS,
@@ -28,49 +29,10 @@ export function exportMap(
 export async function exportMesh(
   cells: Cell[],
   settings: RenderSettings = DEFAULT_RENDER_SETTINGS,
+  onProgress?: (progress: MeshProgress) => void,
 ) {
-  const { buildTerrainMesh } = await import("../geometry/buildTerrainMesh");
-  const { buildWaterMesh } = await import("../geometry/buildWaterMesh");
-  const { buildRiverMesh } = await import("../geometry/buildRiverMesh");
-  const rivers = buildRiverMesh(cells, settings);
-  const terrain = buildTerrainMesh(cells, settings),
-    water = buildWaterMesh(terrain);
-  try {
-    const lines = ["# Hexterra procedural terrain and water; static surface"];
-    let offset = 0;
-    for (const [name, geometry] of [
-      ["Terrain", terrain],
-      ["Water", water],
-      ["Rivers", rivers],
-    ] as const) {
-      const positions = geometry.getAttribute("position"),
-        normals = geometry.getAttribute("normal"),
-        index = geometry.getIndex();
-      if (!positions.count) continue;
-      lines.push(`o ${name}`);
-      for (let i = 0; i < positions.count; i++)
-        lines.push(
-          `v ${positions.getX(i)} ${positions.getY(i)} ${positions.getZ(i)}`,
-        );
-      for (let i = 0; i < normals.count; i++)
-        lines.push(
-          `vn ${normals.getX(i)} ${normals.getY(i)} ${normals.getZ(i)}`,
-        );
-      for (let i = 0; i < (index?.count ?? positions.count); i += 3)
-        lines.push(
-          `f ${[0, 1, 2]
-            .map((j) => {
-              const v = (index ? index.getX(i + j) : i + j) + offset + 1;
-              return `${v}//${v}`;
-            })
-            .join(" ")}`,
-        );
-      offset += positions.count;
-    }
-    download(lines.join("\n"), "hexterra-terrain.obj", "text/plain");
-  } finally {
-    rivers.dispose();
-    terrain.dispose();
-    water.dispose();
-  }
+  const { requestMesh } = await import("../geometry/requestMesh");
+  const result = await requestMesh(cells, settings, "export", undefined, onProgress);
+  if (result.kind !== "export") throw new Error("Unexpected mesh result");
+  download(result.obj, "hexterra-terrain.obj", "text/plain");
 }
