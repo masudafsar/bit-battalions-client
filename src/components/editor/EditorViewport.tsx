@@ -76,6 +76,8 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
         (editor.paintTool === "river" ? (
           <PathTools
             onCancel={editor.cancelRiver}
+            action={editor.riverAction}
+            onAction={editor.setRiverAction}
             drafting={editor.riverDraft.length > 0}
           />
         ) : (
@@ -109,7 +111,9 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
                 ? "Pan mode"
                 : "Orbit mode"
               : editor.paintTool === "river"
-                ? "River · Select adjacent corners · Dry edges only"
+                ? editor.riverAction === "erase"
+                  ? "Delete river · Click a path"
+                  : "River · Drag through corners · Dry edges only"
                 : `Painting ${terrainInfo[editor.terrain].label.toLowerCase()}`}
           {
             <span className="ml-2 hidden border-l border-line pl-3 text-[9px] text-muted sm:inline">
@@ -118,9 +122,11 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
                   ? "Drag to pan"
                   : "Drag to orbit"
                 : editor.paintTool === "river"
-                  ? editor.riverDraft.length
-                    ? "Click next corner · Escape to cancel"
-                    : "Start at a mountain corner"
+                  ? editor.riverAction === "erase"
+                    ? "Undo restores deleted rivers"
+                    : editor.riverDraft.length
+                      ? "Drag to connect · Escape to cancel"
+                      : "Start at a mountain corner"
                   : selected
                     ? `Q ${selected.q} · R ${selected.r}`
                     : "Click & drag to paint"}

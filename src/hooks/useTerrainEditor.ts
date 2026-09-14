@@ -1,4 +1,4 @@
-import { selectRiverCorner } from "../river";
+import { selectRiverCorner, dragRiverCorners, removeRiverAt } from "../river";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   generate,
@@ -24,7 +24,15 @@ export function useTerrainEditor() {
   const [cells, setCells] = useState(() => loadMap(renderSettings.terrainSize));
   const [terrain, setTerrain] = useState<Terrain>("land");
   const [paintTool, setPaintTool] = useState<"terrain" | "river">("terrain");
-  const [riverDraft, setRiverDraft] = useState<string[]>([]);
+  const [riverAction, setRiverAction] = useState<"draw" | "erase">("draw");
+  const [riverDraft, updateRiverDraft] = useState<string[]>([]);
+  const draftRef = useRef<string[]>([]);
+  const riverPointer = useRef<{ x: number; z: number } | null>(null);
+  const setRiverDraft = useCallback((path: string[]) => {
+    draftRef.current = path;
+    updateRiverDraft(path);
+    if (!path.length) riverPointer.current = null;
+  }, []);
   const [brush, setBrush] = useState(1);
   const [cameraTool, setCameraTool] = useState<"orbit" | "pan">("orbit");
   const [navigate, setNavigate] = useState(false);
@@ -59,12 +67,15 @@ export function useTerrainEditor() {
   useEffect(() => {
     const end = () => {
       stroke.current = false;
+      riverPointer.current = null;
     };
     window.addEventListener("pointerup", end);
     window.addEventListener("blur", end);
+    window.addEventListener("pointercancel", end);
     return () => {
       window.removeEventListener("pointerup", end);
       window.removeEventListener("blur", end);
+      window.removeEventListener("pointercancel", end);
     };
   }, []);
   useEffect(() => {
@@ -84,7 +95,7 @@ export function useTerrainEditor() {
     setCells(previous);
     setHover(null);
     setRenderSettings((s) => ({ ...s, terrainSize: mapRadius(previous) }));
-  }, [history]);
+  }, [history, setRiverDraft]);
   const redo = useCallback(() => {
     if (!history.future.length) return;
     setRiverDraft([]);
@@ -97,7 +108,7 @@ export function useTerrainEditor() {
     setCells(next);
     setHover(null);
     setRenderSettings((s) => ({ ...s, terrainSize: mapRadius(next) }));
-  }, [history]);
+  }, [history, setRiverDraft]);
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (e.key === "Escape") {
@@ -135,23 +146,42 @@ export function useTerrainEditor() {
     }
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [undo, redo, settingsOpen]);
+  }, [undo, redo, settingsOpen, setRiverDraft]);
   function paint(index: number, x: number, z: number, down: boolean) {
     if (mode !== "edit" || navigate) return;
     const center = current.current[index];
     let next: Cell[];
-    if (paintTool === "river") {
+    if (paintTool === "river" && riverAction === "erase") {
       if (!down) return;
-      const result = selectRiverCorner(
-        current.current,
-        index,
-        x,
-        z,
-        riverDraft,
-        renderSettings,
+      setRiverDraft([]);
+      const result = removeRiverAt(current.current, x, z, renderSettings);
+      next = result.cells;
+      setNotice(
+        result.removed
+          ? `Deleted ${result.removed} river path${result.removed === 1 ? "" : "s"}. Undo to restore.`
+          : "Click directly on a river to delete it.",
       );
-      setNotice(result.message);
-      setRiverDraft(result.draft);
+    } else if (paintTool === "river") {
+      if (!down && !riverPointer.current) return;
+      const result = down
+        ? selectRiverCorner(
+            current.current,
+            index,
+            x,
+            z,
+            draftRef.current,
+            renderSettings,
+          )
+        : dragRiverCorners(
+            current.current,
+            riverPointer.current!,
+            { x, z },
+            draftRef.current,
+            renderSettings,
+          );
+      if (down || result.cells !== current.current) setNotice(result.message);
+      if (result.draft !== draftRef.current) setRiverDraft(result.draft);
+      riverPointer.current = result.draft.length ? { x, z } : null;
       next = result.cells;
     } else {
       setRiverDraft([]);
@@ -210,6 +240,11 @@ export function useTerrainEditor() {
     setNotice("A new landscape is ready to explore.");
   }
   return {
+    riverAction,
+    setRiverAction: (action: "draw" | "erase") => {
+      setRiverDraft([]);
+      setRiverAction(action);
+    },
     riverDraft,
     cancelRiver: () => setRiverDraft([]),
     renderSettings,

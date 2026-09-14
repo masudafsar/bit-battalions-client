@@ -1,3 +1,4 @@
+import { removeRiverAt } from "../src/river.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generate, type Cell } from "../src/terrain.ts";
@@ -7,7 +8,7 @@ import {
   cornerKey,
 } from "../src/geometry/riverGraph.ts";
 import { getRiverNetwork } from "../src/geometry/riverNetwork.ts";
-import { selectRiverCorner } from "../src/river.ts";
+import { selectRiverCorner, dragRiverCorners } from "../src/river.ts";
 import { DEFAULT_RENDER_SETTINGS as settings } from "../src/renderSettings.ts";
 import { createTerrainField } from "../src/geometry/terrainField.ts";
 import { buildTerrainMesh } from "../src/geometry/buildTerrainMesh.ts";
@@ -242,4 +243,65 @@ test("the rendered terrain mesh resolves a narrow channel and stays welded", () 
     );
   }
   mesh.dispose();
+});
+
+test("drag strokes connect sampled corners and stop after saving without starting another river", () => {
+  const cells = fixture(),
+    source = cells.find((c) => c.q === 0 && c.r === 0)!,
+    path = route(cells, source),
+    graph = buildRiverGraph(cells);
+  let result = click(cells, path[0], []);
+  for (let i = 1; i < path.length; i++) {
+    const a = graph.get(path[i - 1])!,
+      b = graph.get(path[i])!;
+    result = dragRiverCorners(cells, a, b, result.draft, settings);
+    if (i < path.length - 1)
+      assert.deepEqual(result.draft, path.slice(0, i + 1));
+  }
+  assert.deepEqual(result.cells.find((c) => c.riverPath)?.riverPath, path);
+  assert.equal(result.draft.length, 0);
+  assert.equal(
+    dragRiverCorners(
+      result.cells,
+      graph.get(path[0])!,
+      graph.get(path[1])!,
+      [],
+      settings,
+    ).cells,
+    result.cells,
+  );
+});
+
+test("deleting rivers preserves unrelated terrain and removes only dependent tributaries", () => {
+  const cells = manualCells(),
+    trunk = cells.find((c) => c.riverPath)!.riverPath!,
+    source = cells.find((c) => c.q === 0 && c.r === -2)!;
+  const branch = route(cells, source, (key) => trunk.includes(key));
+  const joined = cells.map((c) =>
+    c === source ? { ...c, riverPath: branch } : c,
+  );
+  const midpoint = (path: string[]) => {
+    const [ax, az] = path[0].split(",").map((n) => Number(n) / 1e6),
+      [bx, bz] = path[1].split(",").map((n) => Number(n) / 1e6);
+    return [(ax + bx) / 2, (az + bz) / 2];
+  };
+  const [x, z] = midpoint(branch),
+    deleted = removeRiverAt(joined, x, z, settings);
+  assert.equal(deleted.removed, 1);
+  assert.equal(getRiverNetwork(deleted.cells, settings).validSources.size, 1);
+  assert.deepEqual(deleted.cells.find((c) => c.riverPath)!.riverPath, trunk);
+  const [tx, tz] = midpoint(trunk),
+    all = removeRiverAt(joined, tx, tz, settings);
+  assert.equal(all.removed, 2);
+  assert.equal(getRiverNetwork(all.cells, settings).segments.length, 0);
+  assert.deepEqual(
+    all.cells.map((c) => c.type),
+    joined.map((c) => c.type),
+  );
+  assert.equal(
+    joined.filter((c) => c.riverPath).length,
+    2,
+    "history snapshot remains unchanged",
+  );
+  assert.equal(removeRiverAt(joined, 999, 999, settings).cells, joined);
 });

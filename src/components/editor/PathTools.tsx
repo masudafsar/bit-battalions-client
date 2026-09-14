@@ -1,10 +1,14 @@
-import { Waves, Route, TrainFront, X } from "lucide-react";
+import { Waves, Route, TrainFront, X, Eraser } from "lucide-react";
 export default function PathTools({
   onCancel,
   drafting,
+  action,
+  onAction,
 }: {
   onCancel: () => void;
   drafting: boolean;
+  action: "draw" | "erase";
+  onAction: (action: "draw" | "erase") => void;
 }) {
   return (
     <section
@@ -13,9 +17,10 @@ export default function PathTools({
     >
       <button
         aria-label="River"
-        aria-pressed
-        title="River · Select consecutive corners along dry edges"
-        className="grid size-9 place-items-center rounded-md bg-[#d1e4e8] text-[#5891a6]"
+        aria-pressed={action === "draw"}
+        onClick={() => onAction("draw")}
+        title="River · Drag through corners along dry edges"
+        className={`grid size-9 place-items-center rounded-md ${action === "draw" ? "bg-[#d1e4e8] text-[#5891a6]" : "text-muted hover:bg-black/5"}`}
       >
         <Waves size={18} />
       </button>
@@ -34,6 +39,15 @@ export default function PathTools({
         className="grid size-9 place-items-center rounded-md text-muted"
       >
         <TrainFront size={18} />
+      </button>
+      <button
+        aria-label="Delete river"
+        aria-pressed={action === "erase"}
+        onClick={() => onAction("erase")}
+        title="Delete river · Also removes tributaries that lose their outlet"
+        className={`grid size-9 place-items-center rounded-md ${action === "erase" ? "bg-red-100 text-red-700" : "text-muted hover:bg-black/5"}`}
+      >
+        <Eraser size={18} />
       </button>
       {drafting && (
         <button

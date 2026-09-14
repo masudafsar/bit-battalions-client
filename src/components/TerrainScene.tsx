@@ -88,7 +88,10 @@ export default function TerrainScene(props: {
           <RiverSurface cells={props.cells} settings={props.settings} flat />
         )}
         {props.mode === "edit" && props.riverMode && (
-          <RiverDraft path={props.riverDraft} />
+          <RiverDraft
+            path={props.riverDraft}
+            terrainSize={props.settings.terrainSize}
+          />
         )}
         <CameraRig
           terrainSize={props.settings.terrainSize}
