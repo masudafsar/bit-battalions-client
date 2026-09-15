@@ -1,4 +1,4 @@
-import { Waves, Route, TrainFront, X, Eraser } from "lucide-react";
+import { Waves, Route, TrainFront, X, Eraser, Pencil } from "lucide-react";
 export default function PathTools({
   onCancel,
   drafting,
@@ -7,8 +7,8 @@ export default function PathTools({
 }: {
   onCancel: () => void;
   drafting: boolean;
-  action: "draw" | "erase";
-  onAction: (action: "draw" | "erase") => void;
+  action: "draw" | "edit" | "erase";
+  onAction: (action: "draw" | "edit" | "erase") => void;
 }) {
   return (
     <section
@@ -39,6 +39,15 @@ export default function PathTools({
         className="grid size-9 place-items-center rounded-md text-muted"
       >
         <TrainFront size={18} />
+      </button>
+      <button
+        aria-label="Edit river"
+        aria-pressed={action === "edit"}
+        onClick={() => onAction("edit")}
+        title="Edit river · Drag from a point on an existing path to redraw downstream"
+        className={`grid size-9 place-items-center rounded-md ${action === "edit" ? "bg-violet-100 text-violet-700" : "text-muted hover:bg-black/5"}`}
+      >
+        <Pencil size={18} />
       </button>
       <button
         aria-label="Delete river"

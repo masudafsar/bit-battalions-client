@@ -24,7 +24,7 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
   return (
     <section
       aria-label="Interactive 3D hex terrain editor"
-      className="relative row-start-2 min-h-0 touch-none overflow-hidden bg-[radial-gradient(ellipse_at_50%_43%,#f0f3e9_0%,#e7ecdf_60%,#dfe5d8_100%)]"
+      className="relative min-h-0 touch-none overflow-hidden bg-[radial-gradient(ellipse_at_50%_43%,#f0f3e9_0%,#e7ecdf_60%,#dfe5d8_100%)]"
     >
       <div className="absolute inset-0">
         <Suspense
@@ -113,7 +113,9 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
               : editor.paintTool === "river"
                 ? editor.riverAction === "erase"
                   ? "Delete river · Click a path"
-                  : "River · Drag through corners · Dry edges only"
+                  : editor.riverAction === "edit"
+                    ? "Edit river · Redraw downstream"
+                    : "River · Drag through corners · Dry edges only"
                 : `Painting ${terrainInfo[editor.terrain].label.toLowerCase()}`}
           {
             <span className="ml-2 hidden border-l border-line pl-3 text-[9px] text-muted sm:inline">
@@ -126,7 +128,9 @@ export default function EditorViewport({ editor }: { editor: TerrainEditor }) {
                     ? "Undo restores deleted rivers"
                     : editor.riverDraft.length
                       ? "Drag to connect · Escape to cancel"
-                      : "Start at a mountain corner"
+                      : editor.riverAction === "edit"
+                        ? "Drag from an existing river · Escape cancels"
+                        : "Start at a mountain corner"
                   : selected
                     ? `Q ${selected.q} · R ${selected.r}`
                     : "Click & drag to paint"}

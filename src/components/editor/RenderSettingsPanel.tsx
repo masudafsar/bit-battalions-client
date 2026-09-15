@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Shuffle, RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import {
   DEFAULT_RENDER_SETTINGS,
@@ -37,44 +37,61 @@ const tabs = [
     keys: ["seabedDepth", "seabedRoughness", "waterOpacity"],
     help: "Static transparent water reveals the procedural seabed. Lower opacity makes the bottom clearer.",
   },
+  {
+    id: "rivers",
+    label: "Rivers",
+    keys: [
+      "riverSourceWidth",
+      "riverMouthWidth",
+      "riverDepth",
+      "riverBankWidth",
+      "riverMeander",
+      "riverCornerSmoothing",
+    ],
+    help: "Streams widen downstream. Channel depth and soft banks reshape the terrain; corner smoothing removes the hex-grid zigzag.",
+  },
 ] as const;
 export default function RenderSettingsPanel({
   settings,
   onApply,
   onClose,
+  live,
+  onLiveChange,
+  onPreview,
 }: {
   settings: RenderSettings;
   onApply: (settings: RenderSettings) => void;
   onClose: () => void;
+  live: boolean;
+  onLiveChange: (live: boolean) => void;
+  onPreview: (settings: RenderSettings) => void;
 }) {
   const [draft, setDraft] = useState(settings);
   const [activeTab, setActiveTab] = useState(0);
   const tab = tabs[activeTab];
+  function changeDraft(next: RenderSettings) {
+    setDraft(next);
+    if (live) onPreview(normalizeSettings(next));
+  }
   function update(key: keyof RenderSettings, value: number) {
-    setDraft((d) => {
-      const next = { ...d, [key]: value };
+      const next = { ...draft, [key]: value };
       if (key === "mountainMinHeight")
         next.mountainMaxHeight = Math.max(value, next.mountainMaxHeight);
       if (key === "mountainMaxHeight")
         next.mountainMinHeight = Math.min(value, next.mountainMinHeight);
-      return next;
-    });
+      if (key === "riverSourceWidth")
+        next.riverMouthWidth = Math.max(value, next.riverMouthWidth);
+      if (key === "riverMouthWidth")
+        next.riverSourceWidth = Math.min(value, next.riverSourceWidth);
+      changeDraft(next);
   }
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const node = dialog.current;
-    node?.showModal();
-    return () => node?.close();
-  }, []);
   return (
-    <dialog
-      ref={dialog}
-      onCancel={(e) => {
-        e.preventDefault();
-        onClose();
+    <aside
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
       }}
       aria-labelledby="render-settings-title"
-      className="fixed inset-0 m-auto max-h-[90dvh] w-[min(92vw,420px)] overflow-hidden rounded-2xl border border-line bg-paper p-0 text-ink shadow-2xl backdrop:bg-ink/30"
+      className="absolute inset-y-0 right-0 z-20 flex w-[min(85vw,380px)] flex-col overflow-hidden border-l border-line bg-paper text-ink shadow-lg lg:static lg:shrink-0 lg:shadow-none"
     >
       <div className="flex items-center justify-between border-b border-line px-5 py-4">
         <h2
@@ -95,7 +112,7 @@ export default function RenderSettingsPanel({
       <div
         role="tablist"
         aria-label="Render categories"
-        className="flex gap-1 border-b border-line px-4 py-2"
+        className="flex gap-1 overflow-x-auto border-b border-line px-4 py-2"
       >
         {tabs.map((item, index) => (
           <button
@@ -118,7 +135,7 @@ export default function RenderSettingsPanel({
               setActiveTab(next);
               document.getElementById(`tab-${tabs[next].id}`)?.focus();
             }}
-            className={`flex-1 rounded-lg px-2 py-2 text-xs transition-colors ${activeTab === index ? "bg-selected font-semibold text-accent" : "text-muted hover:bg-selected/50"}`}
+            className={`min-w-16 flex-1 rounded-lg px-2 py-2 text-xs transition-colors ${activeTab === index ? "bg-selected font-semibold text-accent" : "text-muted hover:bg-selected/50"}`}
           >
             {item.label}
           </button>
@@ -129,10 +146,10 @@ export default function RenderSettingsPanel({
         id={`panel-${tab.id}`}
         aria-labelledby={`tab-${tab.id}`}
         tabIndex={0}
-        className="max-h-[calc(90dvh-205px)] min-h-64 overflow-y-auto px-5 py-4"
+        className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
       >
         <p className="mb-4 text-xs leading-relaxed text-muted">
-          Save to rebuild and keep these settings in this browser.
+          {live ? "Changes apply and save immediately. Close when finished." : "Save to rebuild and keep these settings in this browser."}
         </p>
         {activeTab === 0 && (
           <div className="mb-5 flex items-center justify-between gap-2 text-xs">
@@ -152,14 +169,14 @@ export default function RenderSettingsPanel({
                 aria-label="Randomize seed"
                 title="Randomize seed"
                 onClick={() =>
-                  setDraft((d) => ({
-                    ...d,
+                  changeDraft({
+                    ...draft,
                     seed:
-                      (Math.round(d.seed) +
+                      (Math.round(draft.seed) +
                         1 +
                         Math.floor(Math.random() * 999999)) %
                       1000000,
-                  }))
+                  })
                 }
                 className="rounded-md border border-line p-2 text-accent hover:bg-selected"
               >
@@ -200,9 +217,26 @@ export default function RenderSettingsPanel({
           {tab.help}
         </p>
       </div>
-      <div className="flex justify-between gap-2 border-t border-line p-4">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-line p-3">
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-accent">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Live preview"
+            checked={live}
+            onChange={(e) => {
+              onLiveChange(e.target.checked);
+              if (e.target.checked) onPreview(normalizeSettings(draft));
+            }}
+            className="peer sr-only"
+          />
+          <span className="flex h-5 w-9 items-center rounded-full bg-muted/30 p-0.5 transition-colors peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
+            <span className={`size-4 rounded-full bg-white shadow-sm transition-transform ${live ? "translate-x-4" : "translate-x-0"}`} />
+          </span>
+          Live
+        </label>
         <button
-          onClick={() => setDraft({ ...DEFAULT_RENDER_SETTINGS })}
+          onClick={() => changeDraft({ ...DEFAULT_RENDER_SETTINGS })}
           className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-xs text-muted hover:bg-selected"
         >
           <RotateCcw size={13} />
@@ -212,9 +246,9 @@ export default function RenderSettingsPanel({
           onClick={() => onApply(normalizeSettings(draft))}
           className="rounded-lg bg-accent px-4 py-2.5 text-xs text-white hover:bg-accent/90"
         >
-          Save & rebuild
+          {live ? "Done" : "Save & rebuild"}
         </button>
       </div>
-    </dialog>
+    </aside>
   );
 }

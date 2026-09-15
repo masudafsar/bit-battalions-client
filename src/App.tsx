@@ -9,6 +9,7 @@ import EditorStatus from "./components/editor/EditorStatus";
 import RenderSettingsPanel from "./components/editor/RenderSettingsPanel";
 export default function App() {
   const editor = useTerrainEditor();
+  const [liveSettings, setLiveSettings] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<MeshProgress>();
   const exportPending = useRef(false);
@@ -42,9 +43,19 @@ export default function App() {
         }}
         onExportMesh={downloadMesh}
       />
+      <div className="relative flex min-h-0 min-w-0 overflow-hidden">
+        <div className="grid min-h-0 min-w-0 flex-1">
+          <EditorViewport editor={editor} />
+        </div>
       {editor.settingsOpen && (
         <RenderSettingsPanel
           settings={editor.renderSettings}
+          live={liveSettings}
+          onLiveChange={setLiveSettings}
+          onPreview={(settings) => {
+            editor.applySettings(settings);
+            editor.setMode("preview");
+          }}
           onClose={() => editor.setSettingsOpen(false)}
           onApply={(settings) => {
             editor.applySettings(settings);
@@ -53,7 +64,7 @@ export default function App() {
           }}
         />
       )}
-      <EditorViewport editor={editor} />
+      </div>
       {exporting && <MeshLoading label="Preparing mesh export…" progress={exportProgress} />}
       <EditorStatus cells={editor.cells} preview={editor.mode === "preview"} />
     </main>

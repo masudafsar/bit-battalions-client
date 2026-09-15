@@ -20,6 +20,8 @@ export default function EditorHelp({ onClose }: { onClose: () => void }) {
         Scroll / pinch · Zoom
         <br />1 / 2 / 3 · Pick terrain
         <br />B / H / P · Paint / orbit / pan
+        <br />Edit river · Drag from an existing path to redraw downstream
+        <br />Escape · Cancel river draft
         <br />⌘ / Ctrl + Z · Undo
       </p>
     </div>
