@@ -206,6 +206,13 @@ test("manually connected tributaries retain downstream slope, taper and seeded m
   assert.equal(network.validSources.size, 2);
   const outlet = network.segments.filter((s) => Math.abs(s.b.y - (network.nodes.get(trunk.at(-1)!)!.water)) < 1e-9);
   assert.ok(outlet.length > 0);
+  const mouth = network.nodes.get(trunk.at(-1)!)!;
+  assert.ok(
+    outlet.some(
+      (s) => Math.hypot(s.b.x - mouth.x, s.b.z - mouth.z) < 1e-9,
+    ),
+  );
+  assert.equal(mouth.water, mouth.height);
   for (const s of outlet) assert.ok(Math.abs(s.endWidth - settings.riverMouthWidth) < 1e-9);
   assert.ok(network.segments.every((s) => s.endWidth <= settings.riverMouthWidth + 1e-9));
   const sourceKey = branch[0], sourceNode = network.nodes.get(sourceKey)!;

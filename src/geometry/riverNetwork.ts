@@ -24,7 +24,10 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
     nodes.set(key, {
       ...n,
       height: field(n.x, n.z).height,
-      water: SEA_LEVEL + 0.008,
+      // A river mouth terminates at the receiving water cell's seabed. This
+      // lets the channel continue into the water instead of stopping at the
+      // shoreline while keeping the underwater end merged with the terrain.
+      water: n.ocean ? field(n.x, n.z).height : SEA_LEVEL + 0.008,
       cost: Infinity,
     });
   const paths = cells.flatMap((cell) => {
@@ -129,7 +132,7 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
     buckets = new Map<string, RiverSegment[]>();
   const incoming = new Map<string, string[]>();
   for (const key of flow.keys()) {
-    if (nodes.get(key)!.ocean) continue;
+    if (!nodes.get(key)!.next) continue;
     const next = nodes.get(key)!.next!;
     const list = incoming.get(next) ?? [];
     list.push(key);
