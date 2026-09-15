@@ -73,17 +73,25 @@ export default function RenderSettingsPanel({
     setDraft(next);
     if (live) onPreview(normalizeSettings(next));
   }
+  function withValue(key: keyof RenderSettings, value: number) {
+    const next = { ...draft, [key]: value };
+    if (key === "mountainMinHeight")
+      next.mountainMaxHeight = Math.max(value, next.mountainMaxHeight);
+    if (key === "mountainMaxHeight")
+      next.mountainMinHeight = Math.min(value, next.mountainMinHeight);
+    if (key === "riverSourceWidth")
+      next.riverMouthWidth = Math.max(value, next.riverMouthWidth);
+    if (key === "riverMouthWidth")
+      next.riverSourceWidth = Math.min(value, next.riverSourceWidth);
+    return next;
+  }
   function update(key: keyof RenderSettings, value: number) {
-      const next = { ...draft, [key]: value };
-      if (key === "mountainMinHeight")
-        next.mountainMaxHeight = Math.max(value, next.mountainMaxHeight);
-      if (key === "mountainMaxHeight")
-        next.mountainMinHeight = Math.min(value, next.mountainMinHeight);
-      if (key === "riverSourceWidth")
-        next.riverMouthWidth = Math.max(value, next.riverMouthWidth);
-      if (key === "riverMouthWidth")
-        next.riverSourceWidth = Math.min(value, next.riverSourceWidth);
-      changeDraft(next);
+    setDraft(withValue(key, value));
+  }
+  function finishUpdate(key: keyof RenderSettings, value: number) {
+    const next = withValue(key, value);
+    setDraft(next);
+    if (live) onPreview(normalizeSettings(next));
   }
   return (
     <aside
@@ -149,7 +157,7 @@ export default function RenderSettingsPanel({
         className="min-h-0 flex-1 overflow-y-auto px-5 py-4"
       >
         <p className="mb-4 text-xs leading-relaxed text-muted">
-          {live ? "Changes apply and save immediately. Close when finished." : "Save to rebuild and keep these settings in this browser."}
+          {live ? "Changes apply when you release a control. Close when finished." : "Save to rebuild and keep these settings in this browser."}
         </p>
         {activeTab === 0 && (
           <div className="mb-5 flex items-center justify-between gap-2 text-xs">
@@ -163,6 +171,12 @@ export default function RenderSettingsPanel({
                 step={1}
                 value={draft.seed}
                 onChange={(e) => update("seed", Number(e.target.value))}
+                onBlur={(e) =>
+                  finishUpdate("seed", Number(e.currentTarget.value))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
                 className="w-24 rounded-md border border-line bg-white px-2 py-1.5 text-right"
               />
               <button
@@ -206,6 +220,24 @@ export default function RenderSettingsPanel({
                   step={step}
                   value={draft[key]}
                   onChange={(e) => update(key, Number(e.target.value))}
+                  onPointerUp={(e) =>
+                    finishUpdate(key, Number(e.currentTarget.value))
+                  }
+                  onKeyUp={(e) => {
+                    if (
+                      [
+                        "ArrowLeft",
+                        "ArrowRight",
+                        "ArrowUp",
+                        "ArrowDown",
+                        "Home",
+                        "End",
+                        "PageUp",
+                        "PageDown",
+                      ].includes(e.key)
+                    )
+                      finishUpdate(key, Number(e.currentTarget.value));
+                  }}
                   className="block h-1.5 w-full cursor-pointer accent-accent"
                 />
               </label>
