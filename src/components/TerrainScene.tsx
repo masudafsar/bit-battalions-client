@@ -9,6 +9,7 @@ import CameraRig from "./scene/CameraRig";
 import SceneBoundary from "./scene/SceneBoundary";
 import EditableGrid from "./scene/EditableGrid";
 import ContinuousTerrain from "./scene/ContinuousTerrain";
+import BoardFrame from "./scene/BoardFrame";
 import type { RenderSettings } from "../renderSettings";
 export default function TerrainScene(props: {
   cells: Cell[];
@@ -93,6 +94,7 @@ export default function TerrainScene(props: {
             terrainSize={props.settings.terrainSize}
           />
         )}
+        <BoardFrame settings={props.settings} />
         <CameraRig
           terrainSize={props.settings.terrainSize}
           reset={props.reset}
