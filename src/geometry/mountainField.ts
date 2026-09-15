@@ -4,6 +4,8 @@ import { fbm, random } from "./noise.ts";
 
 type Peak = { q: number; r: number; x: number; z: number; height: number };
 type Point = { x: number; z: number; height: number };
+const PEAK_FALLOFF = 2.45;
+const RIDGE_FALLOFF = 3.05;
 
 export function createMountainNetwork(cells: Cell[], settings: RenderSettings) {
   const {
@@ -105,8 +107,13 @@ export function createMountainField(cells: Cell[], settings: RenderSettings) {
         0.18 *
         settings.randomness;
     let height = -100;
+    // Let foothills reach the hex boundary instead of concentrating the whole
+    // elevation around the center. Rock noise still supplies the sharp crest.
     for (const p of peaks)
-      height = merge(height, p.height - Math.hypot(wx - p.x, wz - p.z) * 3.7);
+      height = merge(
+        height,
+        p.height - Math.hypot(wx - p.x, wz - p.z) * PEAK_FALLOFF,
+      );
     for (const segments of paths) {
       let ridgeHeight = -100;
       for (const { a, b } of segments) {
@@ -124,7 +131,8 @@ export function createMountainField(cells: Cell[], settings: RenderSettings) {
         const candidate =
           a.height +
           (b.height - a.height) * t -
-          Math.hypot(wx - a.x - dx * t, wz - a.z - dz * t) * 4.3;
+          Math.hypot(wx - a.x - dx * t, wz - a.z - dz * t) *
+            RIDGE_FALLOFF;
         // Union each entire ridge once, avoiding bumps at polyline sample boundaries.
         ridgeHeight = Math.max(ridgeHeight, candidate);
       }

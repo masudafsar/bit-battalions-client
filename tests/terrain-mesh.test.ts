@@ -153,6 +153,38 @@ test("neighboring mountains form elevated ridges and steep rock faces", () => {
   water.dispose();
 });
 
+test("isolated mountains carry broad foothills to their hex edges", () => {
+  const settings = {
+    ...normalizeSettings(null),
+    seed: 42,
+    randomness: 0,
+    mountainMinHeight: 5,
+    mountainMaxHeight: 5,
+    mountainRoughness: 0,
+  };
+  const cells = generate().map((c) => ({
+    ...c,
+    type: (c.q === 0 && c.r === 0 ? "mountain" : "land") as
+      | "land"
+      | "mountain",
+  }));
+  const field = createTerrainField(cells, settings);
+  const ground = createTerrainField(
+    cells.map((c) => ({ ...c, type: "land" as const })),
+    settings,
+  );
+  const centerRise = field(0, 0).height - ground(0, 0).height;
+  for (let side = 0; side < 6; side++) {
+    const angle = (side * Math.PI) / 3;
+    const x = Math.cos(angle) * 0.82;
+    const z = Math.sin(angle) * 0.82;
+    assert.ok(
+      field(x, z).height - ground(x, z).height > centerRise * 0.24,
+      "foothills remain visibly elevated near every hex side",
+    );
+  }
+});
+
 test("render settings control mountain heights, ground noise, and seabed relief", () => {
   const defaults = normalizeSettings(null);
   const cells = generate();
