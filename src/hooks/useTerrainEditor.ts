@@ -1,7 +1,13 @@
-import { selectRiverCorner, dragRiverCorners, removeRiverAt } from "../river";
+import {
+  selectRiverCorner,
+  dragRiverCorners,
+  removeRiverAt,
+  editRiverAt,
+  type RiverReference,
+} from "../river";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  generate,
+  generateWithRivers,
   loadMap,
   resizeMap,
   mapRadius,
@@ -24,14 +30,18 @@ export function useTerrainEditor() {
   const [cells, setCells] = useState(() => loadMap(renderSettings.terrainSize));
   const [terrain, setTerrain] = useState<Terrain>("land");
   const [paintTool, setPaintTool] = useState<"terrain" | "river">("terrain");
-  const [riverAction, setRiverAction] = useState<"draw" | "erase">("draw");
+  const [riverAction, setRiverAction] = useState<"draw" | "edit" | "erase">("draw");
   const [riverDraft, updateRiverDraft] = useState<string[]>([]);
+  const editingOwner = useRef<RiverReference | undefined>(undefined);
   const draftRef = useRef<string[]>([]);
   const riverPointer = useRef<{ x: number; z: number } | null>(null);
   const setRiverDraft = useCallback((path: string[]) => {
     draftRef.current = path;
     updateRiverDraft(path);
-    if (!path.length) riverPointer.current = null;
+    if (!path.length) {
+      riverPointer.current = null;
+      editingOwner.current = undefined;
+    }
   }, []);
   const [brush, setBrush] = useState(1);
   const [cameraTool, setCameraTool] = useState<"orbit" | "pan">("orbit");
@@ -162,6 +172,22 @@ export function useTerrainEditor() {
           : "Click directly on a river to delete it.",
       );
     } else if (paintTool === "river") {
+      if (riverAction === "edit" && editingOwner.current === undefined) {
+        if (!down) return;
+        const selection = editRiverAt(current.current, x, z);
+        if (selection.owner < 0) {
+          setNotice("Click a river where you want to redraw its downstream path.");
+          return;
+        }
+        editingOwner.current = {
+          owner: selection.owner,
+          pathIndex: selection.pathIndex,
+        };
+        setRiverDraft(selection.draft);
+        riverPointer.current = { x, z };
+        setNotice("Drag a new downstream path. Click an earlier purple corner to rewind. Escape cancels.");
+        return;
+      }
       if (!down && !riverPointer.current) return;
       const result = down
         ? selectRiverCorner(
@@ -171,6 +197,8 @@ export function useTerrainEditor() {
             z,
             draftRef.current,
             renderSettings,
+            editingOwner.current,
+            true,
           )
         : dragRiverCorners(
             current.current,
@@ -178,8 +206,10 @@ export function useTerrainEditor() {
             { x, z },
             draftRef.current,
             renderSettings,
+            editingOwner.current,
           );
-      if (down || result.cells !== current.current) setNotice(result.message);
+      if (down || result.cells !== current.current || result.message.startsWith("This edit"))
+        setNotice(result.message);
       if (result.draft !== draftRef.current) setRiverDraft(result.draft);
       riverPointer.current = result.draft.length ? { x, z } : null;
       next = result.cells;
@@ -199,7 +229,8 @@ export function useTerrainEditor() {
       next.every(
         (c, i) =>
           c.type === current.current[i].type &&
-          c.riverPath === current.current[i].riverPath,
+          c.riverPath === current.current[i].riverPath &&
+          c.riverPaths === current.current[i].riverPaths,
       )
     )
       return;
@@ -231,17 +262,17 @@ export function useTerrainEditor() {
     setHistory((h) => ({ past: [...h.past.slice(-49), before], future: [] }));
     const seed =
       (renderSettings.seed + 1 + Math.floor(Math.random() * 999999)) % 1000000;
-    const next = generate(seed, renderSettings.terrainSize);
+    const next = generateWithRivers(seed, renderSettings.terrainSize);
     setRenderSettings((s) => ({ ...s, seed }));
     setHover(null);
     stroke.current = false;
     current.current = next;
     setCells(next);
-    setNotice("A new landscape is ready to explore.");
+    setNotice("A new landscape with rivers is ready to explore.");
   }
   return {
     riverAction,
-    setRiverAction: (action: "draw" | "erase") => {
+    setRiverAction: (action: "draw" | "edit" | "erase") => {
       setRiverDraft([]);
       setRiverAction(action);
     },

@@ -24,12 +24,17 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
     nodes.set(key, {
       ...n,
       height: field(n.x, n.z).height,
-      water: SEA_LEVEL + 0.01,
+      water: SEA_LEVEL + 0.008,
       cost: Infinity,
     });
-  const paths = cells
-    .filter((c) => c.riverPath?.length)
-    .map((c) => ({ cell: c, path: c.riverPath! }));
+  const paths = cells.flatMap((cell) => {
+    const stored = cell.riverPaths ?? (cell.riverPath ? [cell.riverPath] : []);
+    return stored.map((path, index) => ({
+      cell,
+      path,
+      source: index ? `${cell.q},${cell.r}@${index}` : `${cell.q},${cell.r}`,
+    }));
+  });
   const conflicts = new Set<string>();
   for (const { path } of paths) {
     if (
@@ -51,7 +56,7 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
     validSources = new Set<string>(),
     order: string[] = [];
   const included = new Set<string>();
-  for (const { cell, path } of paths) {
+  for (const { path, source } of paths) {
     if (!nodes.get(path[0])?.cells.some((c) => c.type === "mountain")) continue;
     const chain: string[] = [],
       visited = new Set<string>();
@@ -71,7 +76,7 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
       key = n.next;
     }
     if (!valid || !path.every((key, i) => chain[i] === key)) continue;
-    validSources.add(`${cell.q},${cell.r}`);
+    validSources.add(source);
     for (let i = chain.length - 1; i >= 0; i--) {
       const key = chain[i],
         n = nodes.get(key)!;
@@ -80,7 +85,7 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
         included.add(key);
         order.push(key);
       }
-      if (i < chain.length - 1) flow.set(key, (flow.get(key) ?? 0) + 1);
+      flow.set(key, (flow.get(key) ?? 0) + 1);
     }
   }
   // Topological order follows ONLY user-selected edges, never a shortest route.
@@ -107,19 +112,66 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
         Math.max(distance.get(n.next) ?? 0, (distance.get(key) ?? 0) + 1),
       );
   }
-  const widthAt = (key: string) =>
-    0.035 +
-    0.065 * (1 - Math.exp(-(distance.get(key) ?? 0) / 10)) +
-    Math.min(0.015, Math.max(0, (flow.get(key) ?? 1) - 1) * 0.003);
+  const outletFlow = new Map<string, number>();
+  for (const key of order) {
+    const node = nodes.get(key)!;
+    outletFlow.set(key, node.ocean ? flow.get(key)! : outletFlow.get(node.next!)!);
+  }
+  const widthAt = (key: string) => {
+    const upstream = distance.get(key) ?? 0;
+    const progress = upstream / Math.max(1, upstream + nodes.get(key)!.cost);
+    // Tributaries contribute discharge; every basin reaches its configured mouth width.
+    const discharge = Math.sqrt((flow.get(key) ?? 1) / outletFlow.get(key)!);
+    const source = Math.min(settings.riverSourceWidth, settings.riverMouthWidth * 0.15);
+    return source + (settings.riverMouthWidth - source) * progress * discharge;
+  };
   const segments: RiverSegment[] = [],
     buckets = new Map<string, RiverSegment[]>();
+  const incoming = new Map<string, string[]>();
   for (const key of flow.keys()) {
+    if (nodes.get(key)!.ocean) continue;
+    const next = nodes.get(key)!.next!;
+    const list = incoming.get(next) ?? [];
+    list.push(key);
+    incoming.set(next, list);
+  }
+  const unit = (x: number, z: number) => {
+    const length = Math.hypot(x, z);
+    return length ? { x: x / length, z: z / length } : { x: 0, z: 0 };
+  };
+  const blend = (
+    edge: { x: number; z: number },
+    continuation: { x: number; z: number } | undefined,
+  ) =>
+    !continuation
+      ? edge
+      : unit(
+          edge.x * (1 - settings.riverCornerSmoothing) +
+            continuation.x * settings.riverCornerSmoothing,
+          edge.z * (1 - settings.riverCornerSmoothing) +
+            continuation.z * settings.riverCornerSmoothing,
+        );
+  for (const key of flow.keys()) {
+    if (nodes.get(key)!.ocean) continue;
     const a = nodes.get(key)!,
       b = nodes.get(a.next!)!,
       dx = b.x - a.x,
       dz = b.z - a.z;
     const width = widthAt(key),
-      endWidth = Math.max(width, widthAt(a.next!));
+      endWidth = Math.max(width, widthAt(a.next!)),
+      length = Math.hypot(dx, dz),
+      edge = unit(dx, dz),
+      previous = incoming.get(key)?.[0],
+      previousNode = previous ? nodes.get(previous)! : undefined,
+      start = blend(
+        edge,
+        previousNode ? unit(a.x - previousNode.x, a.z - previousNode.z) : undefined,
+      ),
+      nextNode = b.next ? nodes.get(b.next) : undefined,
+      end = blend(
+        edge,
+        nextNode ? unit(nextNode.x - b.x, nextNode.z - b.z) : undefined,
+      );
     const bend =
       (random(
         Math.round(a.x * 100),
@@ -127,13 +179,31 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
         settings.seed + 917,
       ) -
         0.5) *
-      0.22 *
+      settings.riverMeander *
       settings.randomness;
-    const point = (t: number): RiverPoint => ({
-      x: a.x + dx * t - dz * Math.sin(Math.PI * t) * bend,
-      z: a.z + dz * t + dx * Math.sin(Math.PI * t) * bend,
-      y: a.water + (b.water - a.water) * t,
-    });
+    const point = (t: number): RiverPoint => {
+      const inverse = 1 - t,
+        c1x = a.x + start.x * length / 3,
+        c1z = a.z + start.z * length / 3,
+        c2x = b.x - end.x * length / 3,
+        c2z = b.z - end.z * length / 3,
+        curve = Math.sin(Math.PI * t) ** 2 * bend;
+      return {
+        x:
+          inverse ** 3 * a.x +
+          3 * inverse ** 2 * t * c1x +
+          3 * inverse * t ** 2 * c2x +
+          t ** 3 * b.x -
+          dz * curve,
+        z:
+          inverse ** 3 * a.z +
+          3 * inverse ** 2 * t * c1z +
+          3 * inverse * t ** 2 * c2z +
+          t ** 3 * b.z +
+          dx * curve,
+        y: a.water + (b.water - a.water) * t,
+      };
+    };
     for (let i = 0; i < 8; i++) {
       const segment = {
         a: point(i / 8),
@@ -174,7 +244,9 @@ export function getRiverNetwork(cells: Cell[], settings: RenderSettings) {
     entry = cache.get(cells);
   if (entry?.key === key) return entry.network;
   // No source means no graph construction during ordinary terrain painting.
-  const network = cells.some((c) => c.riverPath !== undefined)
+  const network = cells.some(
+    (c) => c.riverPath !== undefined || c.riverPaths?.length,
+  )
     ? buildRiverNetwork(cells, settings)
     : {
         nodes: new Map<string, Node>(),

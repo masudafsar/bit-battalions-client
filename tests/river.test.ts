@@ -1,4 +1,4 @@
-import { removeRiverAt } from "../src/river.ts";
+import { removeRiverAt, editRiverAt } from "../src/river.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generate, type Cell } from "../src/terrain.ts";
@@ -9,7 +9,10 @@ import {
 } from "../src/geometry/riverGraph.ts";
 import { getRiverNetwork } from "../src/geometry/riverNetwork.ts";
 import { selectRiverCorner, dragRiverCorners } from "../src/river.ts";
-import { DEFAULT_RENDER_SETTINGS as settings } from "../src/renderSettings.ts";
+import {
+  DEFAULT_RENDER_SETTINGS as settings,
+  normalizeSettings,
+} from "../src/renderSettings.ts";
 import { createTerrainField } from "../src/geometry/terrainField.ts";
 import { buildTerrainMesh } from "../src/geometry/buildTerrainMesh.ts";
 function fixture(): Cell[] {
@@ -34,6 +37,21 @@ function route(cells: Cell[], source: Cell, target?: (key: string) => boolean) {
     const key = path.at(-1)!;
     if (path.length > 1 && (target ? target(key) : graph.get(key)!.ocean))
       return path;
+    for (const next of graph.get(key)!.adjacent)
+      if (!seen.has(next)) {
+        seen.add(next);
+        queue.push([...path, next]);
+      }
+  }
+  throw Error("missing test route");
+}
+function routeFromKey(cells: Cell[], start: string) {
+  const graph = buildRiverGraph(cells),
+    queue = [[start]],
+    seen = new Set([start]);
+  for (const path of queue) {
+    const key = path.at(-1)!;
+    if (path.length > 1 && graph.get(key)!.ocean) return path;
     for (const next of graph.get(key)!.adjacent)
       if (!seen.has(next)) {
         seen.add(next);
@@ -79,6 +97,38 @@ test("manual corner clicks create only explicitly chosen edges and commit at the
   assert.equal(network.segments.length, (path.length - 1) * 8);
   for (let i = 0; i < path.length - 1; i++)
     assert.equal(network.nodes.get(path[i])!.next, path[i + 1]);
+});
+test("two source corners on one mountain cell keep independent river paths", () => {
+  let cells = fixture();
+  const source = cells.find((c) => c.q === 0 && c.r === 0)!;
+  const routes = Array.from({ length: 6 }, (_, i) => corner(source, i))
+    .map((point) => routeFromKey(cells, cornerKey(point.x, point.z)))
+    .filter((path, index, all) => all.findIndex((other) => other[0] === path[0]) === index);
+  assert.ok(routes.length >= 2);
+  for (const path of routes.slice(0, 2)) {
+    let draft: string[] = [];
+    for (const key of path) {
+      const node = buildRiverGraph(cells).get(key)!;
+      const result = selectRiverCorner(
+        cells,
+        cells.indexOf(
+          node.cells.find((cell) => cell.q === source.q && cell.r === source.r) ??
+            node.cells[0],
+        ),
+        node.x,
+        node.z,
+        draft,
+        settings,
+      );
+      draft = result.draft;
+      cells = result.cells;
+    }
+  }
+  const stored = cells.find(
+    (cell) => cell.q === source.q && cell.r === source.r,
+  )!;
+  assert.equal(stored.riverPaths?.length, 2);
+  assert.equal(getRiverNetwork(cells, settings).validSources.size, 2);
 });
 test("edges require two dry cells; one or two water sides and map boundaries are forbidden", () => {
   const cells = fixture(),
@@ -154,6 +204,13 @@ test("manually connected tributaries retain downstream slope, taper and seeded m
   );
   const network = getRiverNetwork(joined, settings);
   assert.equal(network.validSources.size, 2);
+  const outlet = network.segments.filter((s) => Math.abs(s.b.y - (network.nodes.get(trunk.at(-1)!)!.water)) < 1e-9);
+  assert.ok(outlet.length > 0);
+  for (const s of outlet) assert.ok(Math.abs(s.endWidth - settings.riverMouthWidth) < 1e-9);
+  assert.ok(network.segments.every((s) => s.endWidth <= settings.riverMouthWidth + 1e-9));
+  const sourceKey = branch[0], sourceNode = network.nodes.get(sourceKey)!;
+  const first = network.segments.find((s) => Math.hypot(s.a.x - sourceNode.x, s.a.z - sourceNode.z) < 1e-6)!;
+  assert.ok(first.width <= settings.riverMouthWidth * 0.15);
   const field = createTerrainField(joined, settings);
   assert.ok(
     network.segments.every(
@@ -186,6 +243,55 @@ test("manually connected tributaries retain downstream slope, taper and seeded m
       f(s.a.x + (s.b.x - s.a.x) * 0.1, s.a.z + (s.b.z - s.a.z) * 0.1).height >
         f(s.a.x + (s.b.x - s.a.x) * 0.9, s.a.z + (s.b.z - s.a.z) * 0.9).height,
     );
+  }
+});
+
+test("river render settings control width, depth, bank softness, and meanders", () => {
+  const cells = manualCells();
+  const baseline = getRiverNetwork(cells, settings);
+  const wider = getRiverNetwork(cells, {
+    ...settings,
+    riverSourceWidth: 0.08,
+    riverMouthWidth: 0.18,
+  });
+  assert.ok(wider.segments[0].width > baseline.segments[0].width);
+  const segment = baseline.segments[Math.floor(baseline.segments.length / 2)];
+  const x = (segment.a.x + segment.b.x) / 2,
+    z = (segment.a.z + segment.b.z) / 2;
+  const deep = createTerrainField(cells, { ...settings, riverDepth: 0.4 });
+  const shallow = createTerrainField(cells, { ...settings, riverDepth: 0.04 });
+  assert.ok(deep(x, z).height < shallow(x, z).height);
+  const straight = getRiverNetwork(cells, { ...settings, riverMeander: 0 });
+  assert.notDeepEqual(straight.segments, baseline.segments);
+  const normalized = normalizeSettings({
+    ...settings,
+    riverSourceWidth: 0.12,
+    riverMouthWidth: 0.04,
+  });
+  assert.equal(normalized.riverSourceWidth, 0.04);
+  assert.equal(normalized.riverMouthWidth, 0.12);
+});
+
+test("corner smoothing rounds manual river turns without moving their selected endpoints", () => {
+  const cells = manualCells();
+  const sharp = getRiverNetwork(cells, { ...settings, riverCornerSmoothing: 0 });
+  const smooth = getRiverNetwork(cells, { ...settings, riverCornerSmoothing: 1 });
+  const alignment = (network: ReturnType<typeof getRiverNetwork>) => {
+    let lowest = 1;
+    for (let i = 8; i < network.segments.length; i += 8) {
+      const before = network.segments[i - 1], after = network.segments[i];
+      const ax = before.b.x - before.a.x,
+        az = before.b.z - before.a.z,
+        bx = after.b.x - after.a.x,
+        bz = after.b.z - after.a.z;
+      lowest = Math.min(lowest, (ax * bx + az * bz) / Math.hypot(ax, az) / Math.hypot(bx, bz));
+    }
+    return lowest;
+  };
+  assert.ok(alignment(smooth) > alignment(sharp));
+  for (let i = 0; i < sharp.segments.length; i += 8) {
+    assert.deepEqual(sharp.segments[i].a, smooth.segments[i].a);
+    assert.deepEqual(sharp.segments[i + 7].b, smooth.segments[i + 7].b);
   }
 });
 test("the rendered terrain mesh resolves a narrow channel and stays welded", () => {
@@ -304,4 +410,70 @@ test("deleting rivers preserves unrelated terrain and removes only dependent tri
     "history snapshot remains unchanged",
   );
   assert.equal(removeRiverAt(joined, 999, 999, settings).cells, joined);
+});
+
+test("editing selects an immutable upstream prefix and redraws without joining its old path", () => {
+  const cells = manualCells(), owner = cells.findIndex((c) => c.riverPath);
+  const old = cells[owner].riverPath!, graph = buildRiverGraph(cells);
+  const point = graph.get(old[2])!;
+  const selection = editRiverAt(cells, point.x, point.z);
+  assert.equal(selection.owner, owner);
+  assert.deepEqual(selection.draft, old.slice(0, 3));
+  assert.deepEqual(cells[owner].riverPath, old);
+  assert.equal(editRiverAt(cells, 999, 999).owner, -1);
+  let result = { cells, draft: selection.draft, message: "" };
+  for (let i = 3; i < old.length; i++) {
+    result = dragRiverCorners(cells, graph.get(old[i - 1])!, graph.get(old[i])!, result.draft, settings, owner);
+    if (i < old.length - 1) assert.equal(result.cells, cells);
+  }
+  assert.notEqual(result.cells, cells);
+  assert.deepEqual(result.cells[owner].riverPath, old);
+  assert.equal(result.draft.length, 0);
+  const start = graph.get(old[0])!;
+  assert.deepEqual(selectRiverCorner(cells, cells.indexOf(start.cells[0]), start.x, start.z, selection.draft, settings, owner, true).draft, [old[0]]);
+});
+
+test("editing can replace a river with a different manual outlet and preserve the old snapshot", () => {
+  const cells = manualCells(), owner = cells.findIndex((c) => c.riverPath);
+  const old = [...cells[owner].riverPath!], graph = buildRiverGraph(cells);
+  const alternate = route(cells, cells[owner], (key) => graph.get(key)!.ocean && key !== old.at(-1));
+  let result = { cells, draft: [old[0]], message: "" };
+  for (let i = 1; i < alternate.length; i++)
+    result = dragRiverCorners(cells, graph.get(alternate[i - 1])!, graph.get(alternate[i])!, result.draft, settings, owner);
+  assert.deepEqual(result.cells[owner].riverPath, alternate);
+  assert.deepEqual(cells[owner].riverPath, old);
+  assert.ok(getRiverNetwork(result.cells, settings).validSources.has("0,0"));
+});
+
+test("editing rejects a new trunk that disconnects an existing tributary", () => {
+  const cells = manualCells(), owner = cells.findIndex((c) => c.riverPath);
+  const trunk = cells[owner].riverPath!, source = cells.find((c) => c.q === 0 && c.r === -2)!;
+  const baseGraph = buildRiverGraph(cells), start = corner(source, 0);
+  const branchQueue = [[cornerKey(start.x, start.z)]], branchSeen = new Set(trunk.slice(0, 3));
+  let branch: string[] = [];
+  for (const path of branchQueue) {
+    if (trunk.slice(3, -1).includes(path.at(-1)!)) { branch = path; break; }
+    for (const key of baseGraph.get(path.at(-1)!)!.adjacent)
+      if (!branchSeen.has(key)) { branchSeen.add(key); branchQueue.push([...path, key]); }
+  }
+  assert.ok(branch.length);
+  const joined = cells.map((c) => c === source ? { ...c, riverPath: branch } : c);
+  const graph = buildRiverGraph(joined);
+  // Find a coast route avoiding the tributary junction.
+  const queue = [[trunk[0]]], seen = new Set([trunk[0], ...branch]);
+  let alternate: string[] = [];
+  for (const path of queue) {
+    if (graph.get(path.at(-1)!)!.ocean) { alternate = path; break; }
+    for (const key of graph.get(path.at(-1)!)!.adjacent)
+      if (!seen.has(key)) { seen.add(key); queue.push([...path, key]); }
+  }
+  assert.ok(alternate.length);
+  let result = { cells: joined, draft: [trunk[0]], message: "" };
+  for (let i = 1; i < alternate.length; i++) {
+    const p = graph.get(alternate[i])!;
+    result = selectRiverCorner(joined, joined.indexOf(p.cells[0]), p.x, p.z, result.draft, settings, owner);
+  }
+  assert.equal(result.cells, joined);
+  assert.match(result.message, /tributary/);
+  assert.equal(getRiverNetwork(joined, settings).validSources.size, 2);
 });

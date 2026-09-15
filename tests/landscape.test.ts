@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generate } from "../src/terrain.ts";
+import { generate, generateWithRivers } from "../src/terrain.ts";
+import { getRiverNetwork } from "../src/geometry/riverNetwork.ts";
+import { DEFAULT_RENDER_SETTINGS } from "../src/renderSettings.ts";
 
 test("landscapes are repeatable with varied coverage at every supported scale", () => {
   for (const size of [7, 8, 16, 30]) {
@@ -34,4 +36,18 @@ test("large landscapes differ across seeds and do not repeat translated interior
       patches.add(patch.join(","));
     }
   assert.ok(patches.size >= 20, `${patches.size} distinct interior patches`);
+});
+
+test("new random landscapes add deterministic valid rivers from mountain corners to the sea", () => {
+  for (const size of [7, 16, 30]) {
+    const cells = generateWithRivers(731, size);
+    assert.deepEqual(cells, generateWithRivers(731, size));
+    const network = getRiverNetwork(cells, DEFAULT_RENDER_SETTINGS);
+    assert.ok(network.validSources.size >= 1, `expected a river at size ${size}`);
+    assert.ok(network.segments.length > 0);
+    for (const source of network.validSources) {
+      const [q, r] = source.split("@")[0].split(",").map(Number);
+      assert.equal(cells.find((cell) => cell.q === q && cell.r === r)?.type, "mountain");
+    }
+  }
 });
