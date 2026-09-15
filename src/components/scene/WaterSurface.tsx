@@ -12,6 +12,7 @@ export default function WaterSurface({
     <mesh geometry={geometry} renderOrder={river ? 2 : 1} raycast={() => null}>
       <meshBasicMaterial
         color="#318e9d"
+        vertexColors={river}
         transparent
         opacity={opacity}
         depthWrite={river}

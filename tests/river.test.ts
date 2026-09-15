@@ -1,7 +1,7 @@
 import { removeRiverAt, editRiverAt } from "../src/river.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generate, type Cell } from "../src/terrain.ts";
+import { generate, generateWithRivers, type Cell } from "../src/terrain.ts";
 import {
   buildRiverGraph,
   corner,
@@ -15,6 +15,7 @@ import {
 } from "../src/renderSettings.ts";
 import { createTerrainField } from "../src/geometry/terrainField.ts";
 import { buildTerrainMesh } from "../src/geometry/buildTerrainMesh.ts";
+import { buildRiverMesh } from "../src/geometry/buildRiverMesh.ts";
 function fixture(): Cell[] {
   return generate(3, 7).map((c) => ({
     ...c,
@@ -213,6 +214,11 @@ test("manually connected tributaries retain downstream slope, taper and seeded m
     ),
   );
   assert.equal(mouth.water, mouth.height);
+  const mouthField = createTerrainField(joined, settings);
+  assert.ok(
+    Math.abs(mouthField(mouth.x, mouth.z).height - mouth.water) < 1e-9,
+    "the final river surface merges exactly into the generated seabed",
+  );
   for (const s of outlet) assert.ok(Math.abs(s.endWidth - settings.riverMouthWidth) < 1e-9);
   assert.ok(network.segments.every((s) => s.endWidth <= settings.riverMouthWidth + 1e-9));
   const sourceKey = branch[0], sourceNode = network.nodes.get(sourceKey)!;
@@ -226,8 +232,11 @@ test("manually connected tributaries retain downstream slope, taper and seeded m
   );
   for (const s of network.segments) {
     const x = (s.a.x + s.b.x) / 2,
-      z = (s.a.z + s.b.z) / 2;
-    assert.ok(field(x, z).height < (s.a.y + s.b.y) / 2 - 0.1);
+      z = (s.a.z + s.b.z) / 2,
+      water = (s.a.y + s.b.y) / 2,
+      depth = (s.channelDepth + s.endChannelDepth) / 2;
+    assert.ok(field(x, z).height <= water + 1e-9);
+    if (depth > 0.5) assert.ok(field(x, z).height < water - 0.04);
   }
   assert.deepEqual(
     network.segments,
@@ -246,9 +255,17 @@ test("manually connected tributaries retain downstream slope, taper and seeded m
   const n = getRiverNetwork(cells, noisy),
     f = createTerrainField(cells, noisy);
   for (const s of n.segments) {
+    const upstream = f(
+      s.a.x + (s.b.x - s.a.x) * 0.1,
+      s.a.z + (s.b.z - s.a.z) * 0.1,
+    ).height;
+    const downstream = f(
+      s.a.x + (s.b.x - s.a.x) * 0.9,
+      s.a.z + (s.b.z - s.a.z) * 0.9,
+    ).height;
     assert.ok(
-      f(s.a.x + (s.b.x - s.a.x) * 0.1, s.a.z + (s.b.z - s.a.z) * 0.1).height >
-        f(s.a.x + (s.b.x - s.a.x) * 0.9, s.a.z + (s.b.z - s.a.z) * 0.9).height,
+      upstream >= downstream - 1e-9,
+      `the channel bed never climbs against the river flow: ${upstream} >= ${downstream}; depth ${s.channelDepth}-${s.endChannelDepth}; water ${s.a.y}-${s.b.y}`,
     );
   }
 });
@@ -350,12 +367,62 @@ test("the rendered terrain mesh resolves a narrow channel and stays welded", () 
         break;
       }
     }
-    assert.ok(
-      height !== undefined && height < water - 0.04,
-      `channel mesh must stay submerged: ${height}, ${water}`,
-    );
+    const depth = (s.channelDepth + s.endChannelDepth) / 2;
+    assert.ok(height !== undefined && height <= water + 1e-4);
+    if (depth > 0.5)
+      assert.ok(
+        height < water - 0.04,
+        `channel mesh must stay submerged: ${height}, ${water}`,
+      );
   }
   mesh.dispose();
+});
+
+test("river mouths merge into final seabeds across terrain scales and depths", () => {
+  const scenarios = [
+    { seed: 17, size: 7, seabedDepth: 0.3, seabedRoughness: 0 },
+    { seed: 731, size: 14, seabedDepth: 0.85, seabedRoughness: 0.35 },
+    { seed: 991, size: 30, seabedDepth: 2, seabedRoughness: 0.8 },
+  ];
+  for (const scenario of scenarios) {
+    const cells = generateWithRivers(scenario.seed, scenario.size);
+    const renderSettings = normalizeSettings({
+      ...scenario,
+      randomness: scenario.size === 30 ? 2 : 1,
+    });
+    const network = getRiverNetwork(cells, renderSettings);
+    const field = createTerrainField(cells, renderSettings);
+    const mouths = cells.flatMap((cell) =>
+      (cell.riverPaths ?? (cell.riverPath ? [cell.riverPath] : [])).map(
+        (path) => path.at(-1)!,
+      ),
+    );
+    assert.ok(mouths.length > 0);
+    for (const key of mouths) {
+      const mouth = network.nodes.get(key)!;
+      assert.ok(mouth.ocean);
+      assert.ok(Math.abs(field(mouth.x, mouth.z).height - mouth.water) < 1e-9);
+      const outlet = network.segments.find(
+        (segment) =>
+          Math.hypot(segment.b.x - mouth.x, segment.b.z - mouth.z) < 1e-9,
+      );
+      assert.ok(outlet, "river reaches the center of its receiving water cell");
+      assert.equal(outlet.endChannelDepth, 0);
+      assert.ok(Math.abs(outlet.b.y - mouth.height) < 1e-9);
+    }
+  }
+  const cells = generateWithRivers(731, 14);
+  const riverMesh = buildRiverMesh(cells);
+  const color = riverMesh.getAttribute("color");
+  let transparentMouthVertices = 0;
+  let opaqueRiverVertices = 0;
+  for (let i = 0; i < color.count; i++) {
+    if (color.getW(i) < 1e-9) transparentMouthVertices++;
+    if (color.getW(i) > 1 - 1e-9) opaqueRiverVertices++;
+  }
+  assert.ok(transparentMouthVertices > 0);
+  assert.ok(opaqueRiverVertices > 0);
+  riverMesh.dispose();
 });
 
 test("drag strokes connect sampled corners and stop after saving without starting another river", () => {

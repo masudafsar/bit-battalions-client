@@ -16,20 +16,33 @@ export type RiverSegment = {
   b: RiverPoint;
   width: number;
   endWidth: number;
+  channelDepth: number;
+  endChannelDepth: number;
 };
 export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
   const field = createBaseTerrainField(cells, settings),
     nodes = new Map<string, Node>();
-  for (const [key, n] of buildRiverGraph(cells))
+  for (const [key, n] of buildRiverGraph(cells)) {
+    const sampledHeight = field(n.x, n.z).height;
+    const height = n.ocean
+      ? Math.min(
+          sampledHeight,
+          SEA_LEVEL +
+            0.008 -
+            settings.riverDepth -
+            settings.riverMouthWidth * 0.7,
+        )
+      : sampledHeight;
     nodes.set(key, {
       ...n,
-      height: field(n.x, n.z).height,
+      height,
       // A river mouth terminates at the receiving water cell's seabed. This
       // lets the channel continue into the water instead of stopping at the
       // shoreline while keeping the underwater end merged with the terrain.
-      water: n.ocean ? field(n.x, n.z).height : SEA_LEVEL + 0.008,
+      water: n.ocean ? height : SEA_LEVEL + 0.008,
       cost: Infinity,
     });
+  }
   const paths = cells.flatMap((cell) => {
     const stored = cell.riverPaths ?? (cell.riverPath ? [cell.riverPath] : []);
     return stored.map((path, index) => ({
@@ -101,6 +114,7 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
     }
     const downstream = nodes.get(n.next!)!;
     n.water = Math.max(
+      SEA_LEVEL + 0.008,
       downstream.water + 0.003,
       Math.min(n.height - 0.05, downstream.water + 0.32),
     );
@@ -213,6 +227,8 @@ export function buildRiverNetwork(cells: Cell[], settings: RenderSettings) {
         b: point((i + 1) / 8),
         width: width + ((endWidth - width) * i) / 8,
         endWidth: width + ((endWidth - width) * (i + 1)) / 8,
+        channelDepth: b.ocean ? 1 - i / 8 : 1,
+        endChannelDepth: b.ocean ? 1 - (i + 1) / 8 : 1,
       };
       segments.push(segment);
       for (

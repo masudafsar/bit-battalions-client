@@ -20,6 +20,7 @@ export default function RiverSurface({
     <mesh geometry={geometry} renderOrder={3} raycast={() => null}>
       <meshBasicMaterial
         color="#438fa8"
+        vertexColors
         polygonOffset
         polygonOffsetFactor={-2}
       />

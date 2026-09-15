@@ -38,11 +38,16 @@ export function createTerrainField(
         continue;
       closest = distance;
       const water = segment.a.y + (segment.b.y - segment.a.y) * t;
-      const bed = water - (settings.riverDepth + width * 0.7);
+      const channelDepth =
+        segment.channelDepth +
+        (segment.endChannelDepth - segment.channelDepth) * t;
+      const bed =
+        water - (settings.riverDepth + width * 0.7) * channelDepth;
       // Replace the noisy bed, rather than min() which preserves pits and reverse slopes.
       // A shallow parabolic section rises to the waterline and then to stable banks.
       const inner = Math.min(1, distance / (width * 1.5));
-      const channel = bed + (water + 0.06 - bed) * inner * inner;
+      const channel =
+        bed + (water + 0.06 * channelDepth - bed) * inner * inner;
       const blend = Math.max(
         0,
         Math.min(

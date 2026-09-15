@@ -14,6 +14,7 @@ export function buildRiverMesh(
 ) {
   const network = getRiverNetwork(cells, settings),
     vertices: number[] = [],
+    colors: number[] = [],
     indices: number[] = [];
   let completed = 0;
   onProgress?.(0);
@@ -38,10 +39,19 @@ export function buildRiverMesh(
       flat ? 0.04 : s.b.y,
       s.b.z - (pz * s.endWidth) / s.width,
     );
+    const startAlpha = flat ? 1 : s.channelDepth;
+    const endAlpha = flat ? 1 : s.endChannelDepth;
+    colors.push(
+      1, 1, 1, startAlpha,
+      1, 1, 1, startAlpha,
+      1, 1, 1, endAlpha,
+      1, 1, 1, endAlpha,
+    );
     indices.push(start, start + 2, start + 1, start + 1, start + 2, start + 3);
     // Rounded overlaps close bends and junctions without cracks.
     const center = vertices.length / 3;
     vertices.push(s.a.x, flat ? 0.04 : s.a.y, s.a.z);
+    colors.push(1, 1, 1, startAlpha);
     for (let i = 0; i <= 12; i++) {
       const a = (i * Math.PI) / 6;
       vertices.push(
@@ -49,12 +59,14 @@ export function buildRiverMesh(
         flat ? 0.04 : s.a.y,
         s.a.z + Math.sin(a) * s.width,
       );
+      colors.push(1, 1, 1, startAlpha);
       if (i) indices.push(center, center + i + 1, center + i);
     }
     onProgress?.(0.95 * ++completed / network.segments.length);
   }
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute("color", new Float32BufferAttribute(colors, 4));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   onProgress?.(1);
