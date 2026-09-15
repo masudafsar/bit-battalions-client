@@ -60,6 +60,48 @@ export const settingControls = [
     max: 0.7,
     step: 0.01,
   },
+  {
+    key: "riverSourceWidth",
+    label: "Source width",
+    min: 0.01,
+    max: 0.12,
+    step: 0.005,
+  },
+  {
+    key: "riverMouthWidth",
+    label: "Mouth width",
+    min: 0.04,
+    max: 0.2,
+    step: 0.005,
+  },
+  {
+    key: "riverDepth",
+    label: "Channel depth",
+    min: 0.04,
+    max: 0.5,
+    step: 0.01,
+  },
+  {
+    key: "riverBankWidth",
+    label: "Bank softness",
+    min: 0.08,
+    max: 0.8,
+    step: 0.02,
+  },
+  {
+    key: "riverMeander",
+    label: "Meander amount",
+    min: 0,
+    max: 0.45,
+    step: 0.01,
+  },
+  {
+    key: "riverCornerSmoothing",
+    label: "Corner smoothing",
+    min: 0,
+    max: 1,
+    step: 0.05,
+  },
 ] as const;
 export type RenderSettings = Record<
   (typeof settingControls)[number]["key"],
@@ -80,6 +122,12 @@ export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   seabedDepth: 0.85,
   seabedRoughness: 0.35,
   waterOpacity: 0.28,
+  riverSourceWidth: 0.035,
+  riverMouthWidth: 0.1,
+  riverDepth: 0.12,
+  riverBankWidth: 0.38,
+  riverMeander: 0.22,
+  riverCornerSmoothing: 0.65,
 };
 export function normalizeSettings(value: unknown): RenderSettings {
   const result = { ...DEFAULT_RENDER_SETTINGS };
@@ -104,6 +152,11 @@ export function normalizeSettings(value: unknown): RenderSettings {
     [result.mountainMinHeight, result.mountainMaxHeight] = [
       result.mountainMaxHeight,
       result.mountainMinHeight,
+    ];
+  if (result.riverSourceWidth > result.riverMouthWidth)
+    [result.riverSourceWidth, result.riverMouthWidth] = [
+      result.riverMouthWidth,
+      result.riverSourceWidth,
     ];
   return result;
 }

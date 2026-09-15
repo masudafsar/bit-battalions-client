@@ -1,18 +1,21 @@
-import type { BufferGeometry } from "three";
+import { LessDepth, LessEqualDepth, type BufferGeometry } from "three";
 export default function WaterSurface({
   geometry,
   opacity,
+  river = false,
 }: {
   geometry: BufferGeometry;
   opacity: number;
+  river?: boolean;
 }) {
   return (
-    <mesh geometry={geometry} renderOrder={1}>
+    <mesh geometry={geometry} renderOrder={river ? 2 : 1} raycast={() => null}>
       <meshBasicMaterial
         color="#318e9d"
         transparent
         opacity={opacity}
-        depthWrite={false}
+        depthWrite={river}
+        depthFunc={river ? LessDepth : LessEqualDepth}
       />
     </mesh>
   );

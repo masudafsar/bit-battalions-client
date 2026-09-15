@@ -17,9 +17,7 @@ export default function ContinuousTerrain({
   const { terrain, water } = meshes;
   return (
     <group>
-      <mesh geometry={meshes.rivers} renderOrder={3} raycast={() => null}>
-        <meshBasicMaterial color="#438fa8" polygonOffset polygonOffsetFactor={-2} />
-      </mesh>
+      <WaterSurface geometry={meshes.rivers} opacity={settings.waterOpacity} river />
       <mesh geometry={terrain}>
         <meshStandardMaterial vertexColors roughness={0.95} />
       </mesh>
